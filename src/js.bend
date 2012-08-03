@@ -531,20 +531,26 @@ class JsConverter {
         return JsCall(constructPrefix(prefixFromScope(baseType.instanceScope).concat({ symbol.name, 'call' })), args)
       }
       else if Symbol ctorSymbol = node.ctorSymbol {
+        ClassType getClassType(Type type) {
+          if ClassType type = type { return type }
+          if SpecificType type = type { return type.classType }
+          fail
+        }
         if JsNode native = JsNative.handleCall(ctorSymbol, node, node.args, x -> visit(x)) {
           return native
         }
-        else if MetaType metaType = node.value.resolvedType and ClassType classType = metaType.instanceType {
+        else if MetaType metaType = node.value.resolvedType {
+          ClassType classType = getClassType(metaType.instanceType)
           JsNode[] args = {}
           for arg in node.args { args.push(visit(arg)) }
           return JsCall(JsUnary(constructPrefix(prefixFromScope(classType.staticScope)), JsUnaryOp.NEW), args)
         }
-        else if ClassType classType = node.value.resolvedType {
+        else {
+          ClassType classType = getClassType(node.value.resolvedType)
           JsNode[] args = { JsText(thisAlias.resolveName()) }
           for arg in node.args { args.push(visit(arg)) }
           return JsCall(JsBinary(constructPrefix(prefixFromScope(classType.staticScope)), JsBinaryOp.MEMBER, JsText('call')), args)
         }
-        else { fail }
       }
       else if MemberExpr memberExpr = node.value and
           Symbol symbol = memberExpr.id.symbol and
@@ -555,11 +561,7 @@ class JsConverter {
         JsNode[] args = {}
         for arg in node.args { args.push(visit(arg)) }
         if MetaType metaType = node.value.resolvedType {
-          if metaType.instanceType is ArrayType {
-            // TODO: Replace this special case with a splat constructor in native.bend
-            return JsArray(args)
-          }
-          else if (metaType.instanceType is FuncType or metaType.instanceType == SpecialType.VAR) and args.size == 1 {
+          if (metaType.instanceType is FuncType or metaType.instanceType == SpecialType.VAR) and args.size == 1 {
             return args[0]
           }
           else { fail }
@@ -571,7 +573,8 @@ class JsConverter {
       return JsBinary(visit(node.value), JsBinaryOp.INDEX, visit(node.index))
     }
     else if MemberExpr node = node {
-      if (node.value.resolvedType == ClassType.STRING or node.value.resolvedType is ArrayType) and Symbol symbol = node.id.symbol and symbol.name == 'size' {
+      if (node.value.resolvedType == ClassType.STRING or node.value.resolvedType is SpecificType) and Symbol symbol = node.id.symbol and symbol.name == 'size' {
+        // TODO: remove this special case
         return JsBinary(visit(node.value), JsBinaryOp.MEMBER, JsText('length'))
       }
       else if node.value.resolvedType == SpecialType.VAR {
@@ -597,6 +600,7 @@ class JsConverter {
         visit(node.type))
     }
     else if InitExpr node = node {
+      // TODO: Remove special case
       if ClassType classType = node.resolvedType {
         JsNode[] values = {}
         for value in node.values { values.push(visit(value)) }

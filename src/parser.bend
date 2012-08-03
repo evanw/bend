@@ -330,14 +330,27 @@ class Parser {
     pratt.get(TokenKind.FN, TIGHT_PRECEDENCE).infixParselet = (context, left) -> {
       Location location = context.current().location
       context.next()
-      if not context.expect(TokenKind.LPAREN) { return null }
+      if not context.expect(TokenKind.LARGS) { return null }
       Expr[] args = {}
-      while not context.eat(TokenKind.RPAREN) {
+      while not context.eat(TokenKind.RARGS) {
         if args.size > 0 and not context.expect(TokenKind.COMMA) { return null }
         if Expr arg = pratt.parse(context, 0) { args.push(arg) }
         else { return null }
       }
       return FuncTypeExpr(location, left, args)
+    }
+
+    // Resolved class type
+    pratt.get(TokenKind.LPARAM, TIGHT_PRECEDENCE).infixParselet = (context, left) -> {
+      Location location = context.current().location
+      context.next()
+      Expr[] params = {}
+      while not context.eat(TokenKind.RPARAM) {
+        if params.size > 0 and not context.expect(TokenKind.COMMA) { return null }
+        if Expr param = pratt.parse(context, 0) { params.push(param) }
+        else { return null }
+      }
+      return SpecificTypeExpr(location, left, params)
     }
 
     // Index access
@@ -737,13 +750,21 @@ class Parser {
       if context.eat(TokenKind.CLASS) {
         IdentExpr id = { context.current().location, context.current().text }
         if not context.expect(TokenKind.IDENT) { return null }
+        TypeParam[] params = {}
+        if context.eat(TokenKind.LPARAM) {
+          while not context.eat(TokenKind.RPARAM) {
+            if params.size > 0 and not context.expect(TokenKind.COMMA) { return null }
+            params.push({ context.current().text, params.size })
+            if not context.expect(TokenKind.IDENT) { return null }
+          }
+        }
         Expr? baseType = null
         if context.eat(TokenKind.IS) {
           baseType = pratt.parse(context, 0)
           if baseType == null { return null }
         }
         if Block body = parseBlock(context, BlockKind.CLASS, id.name) {
-          ClassDef classDef = { location, comment, id, modifiers, baseType, body }
+          ClassDef classDef = { location, comment, id, modifiers, baseType, body, params }
           if not expectCommentedEndOfLine(context, classDef) { return null }
           block.stmts.push(classDef)
           continue

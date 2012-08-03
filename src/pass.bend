@@ -118,12 +118,15 @@ class CreateScopesPass is Pass {
     node.scope = scope
     Scope staticScope = { ScopeKind.STATIC, scope, null }
     Scope instanceScope = { ScopeKind.INSTANCE, staticScope, null }
-    ClassType classType = { node.id.name, staticScope, instanceScope, (node.modifiers & Modifier.ABSTRACT) != 0 }
+    ClassType classType = { node.id.name, staticScope, instanceScope, (node.modifiers & Modifier.ABSTRACT) != 0, node.params }
     node.id.symbol = scope.define(log, node.location, SymbolKind.CLASS, node.id.name, classType.metaType, node.modifiers)
     staticScope.symbol = node.id.symbol
     instanceScope.symbol = node.id.symbol
     visit(node.id)
     visit(node.baseType)
+    for param in node.params {
+      staticScope.define(log, node.location, SymbolKind.PARAM, param.name, param.metaType, Modifier.STATIC)
+    }
     for stmt in node.body.stmts {
       if VarDef def = stmt {
         if (def.modifiers & Modifier.STATIC) != 0 { scope = staticScope }
@@ -226,6 +229,11 @@ class CreateScopesPass is Pass {
     base.visitNullableTypeExpr(node)
   }
 
+  over void visitSpecificTypeExpr(SpecificTypeExpr node) {
+    node.scope = scope
+    base.visitSpecificTypeExpr(node)
+  }
+
   over void visitTypeExpr(TypeExpr node) {
     node.scope = scope
     base.visitTypeExpr(node)
@@ -303,10 +311,17 @@ class ResolveBaseTypesPass is Pass {
 class ResolveSymbolTypesPass is Pass {
   ResolveTypesPass resolveTypesPass = { log }
 
+  void checkInstantiable(Location location, Type type) {
+    if Type.isGeneric(type) { log.error(location, 'cannot instantiate generic type ' + type) }
+  }
+
   over void visitVarDef(VarDef node) {
     base.visitVarDef(node)
     resolveTypesPass.visit(node.type)
-    if Symbol symbol = node.id.symbol { symbol.type = instanceType(node.type, false) }
+    if Symbol symbol = node.id.symbol {
+      symbol.type = instanceType(node.type, false)
+      checkInstantiable(node.location, symbol.type)
+    }
   }
 
   over void visitFuncDef(FuncDef node) {
@@ -321,7 +336,7 @@ class ResolveSymbolTypesPass is Pass {
       argTypes.push(argType)
       argNames.push(arg.id.name)
       if arg.isSplat {
-        if argType is not ArrayType {
+        if not Type.isArray(argType) {
           log.error(arg.location, 'splats must be arrays')
         }
         splatIndex = i
@@ -332,7 +347,10 @@ class ResolveSymbolTypesPass is Pass {
     if splatIndex != -1 { funcType.minArgCount-- }
     funcType.splatIndex = splatIndex
     funcType.argNames = argNames
-    if Symbol symbol = node.id.symbol { symbol.type = funcType }
+    if Symbol symbol = node.id.symbol {
+      symbol.type = funcType
+      checkInstantiable(node.location, symbol.type)
+    }
   }
 
   over void visitCtorDef(CtorDef node) {
@@ -345,7 +363,10 @@ class ResolveSymbolTypesPass is Pass {
     }
     FuncType funcType = { SpecialType.VOID, argTypes, argTypes.size }
     funcType.argNames = argNames
-    if Symbol symbol = node.id.symbol { symbol.type = funcType }
+    if Symbol symbol = node.id.symbol {
+      symbol.type = funcType
+      checkInstantiable(node.location, symbol.type)
+    }
   }
 }
 
@@ -484,6 +505,11 @@ class TypeContext {
   Node node
 }
 
+class CtorCallInfo {
+  Symbol? ctorSymbol
+  Type resolvedType
+}
+
 class ResolveTypesPass is Pass {
   ClassType? classType = null
   FuncType? funcType = null
@@ -526,8 +552,8 @@ class ResolveTypesPass is Pass {
           if i + funcType.argTypes.size - args.size > funcType.splatIndex {
             argType = funcType.argTypes[i + funcType.argTypes.size - args.size]
           }
-          else if ArrayType arrayType = funcType.argTypes[funcType.splatIndex] {
-            argType = arrayType.elementType
+          else if SpecificType type = funcType.argTypes[funcType.splatIndex] and type.classType == ClassType.ARRAY {
+            argType = type.paramTypes[0]
           }
         }
         else { argType = funcType.argTypes[i] }
@@ -573,8 +599,8 @@ class ResolveTypesPass is Pass {
     visit(node.value)
     visit(node.id)
     if Symbol symbol = node.id.symbol {
-      if ArrayType arrayType = node.value.resolvedType {
-        symbol.type = arrayType.elementType
+      if SpecificType type = node.value.resolvedType and type.classType == ClassType.ARRAY {
+        symbol.type = type.paramTypes[0]
       }
       else if node.value.resolvedType == ClassType.STRING or node.value.resolvedType == SpecialType.VAR {
         symbol.type = node.value.resolvedType
@@ -657,7 +683,7 @@ class ResolveTypesPass is Pass {
       // 
       //   if x in { 1, 2, 3 } { ... }
       // 
-      visitWithContext(ArrayType(node.left.resolvedType), node.right)
+      visitWithContext(SpecificType(ClassType.ARRAY, { node.left.resolvedType }), node.right)
     }
     else { visit(node.right) }
   }
@@ -673,6 +699,45 @@ class ResolveTypesPass is Pass {
     else { base.visitTertiaryExpr(node) }
   }
 
+  CtorCallInfo? callCtor(Location location, Expr[] args, Type type) {
+    // Common logic for class constructors
+    CtorCallInfo? handleClassType(ClassType classType, Type fn(Type) patch) {
+      if classType.isAbstract {
+        log.error(location, 'cannot instantiate abstract class ' + classType)
+        return null
+      }
+      else if Symbol ctorSymbol = classType.instanceScope.lookup('this', true) and
+          FuncType ctorType = patch(ctorSymbol.type) {
+        visitCallArgs(location, ctorType, args)
+        return { ctorSymbol, type }
+      }
+      log.error(location, type + ' has no constructor')
+      return null
+    }
+
+    if Type.isGeneric(type) {
+      log.error(location, 'cannot instantiate generic type ' + type)
+      return null
+    }
+    else if SpecificType type = type {
+      // Resolve generic constructors before calling them
+      return handleClassType(type.classType, ctorType ->
+        Type.removeParams(ctorType, type.paramTypes))
+    }
+    else if ClassType classType = type {
+      // Normal class constructor
+      return handleClassType(classType, ctorType ->
+        ctorType)
+    }
+    else if type is FuncType or type == SpecialType.VAR {
+      // Special-case constructors for functions and var
+      visitCallArgs(location, { type, { type }, 1 }, args)
+      return { null, type }
+    }
+    log.error(location, type + ' has no constructor')
+    return null
+  }
+
   over void visitCallExpr(CallExpr node) {
     visit(node.value)
     if FuncType funcType = node.value.resolvedType {
@@ -680,31 +745,9 @@ class ResolveTypesPass is Pass {
       visitCallArgs(node.location, funcType, node.args)
     }
     else if MetaType metaType = node.value.resolvedType {
-      if ClassType classType = metaType.instanceType {
-        if classType.isAbstract {
-          log.error(node.location, 'cannot instantiate abstract class ' + classType)
-        }
-        else {
-          node.ctorSymbol = classType.instanceScope.lookup('this', true)
-          node.resolvedType = classType
-          if Symbol ctorSymbol = node.ctorSymbol and FuncType funcType = ctorSymbol.type {
-            visitCallArgs(node.location, funcType, node.args)
-          }
-          else { fail }
-        }
-      }
-      else if ArrayType arrayType = metaType.instanceType {
-        // Call the array constructor
-        for arg in node.args { visitWithContext(arrayType.elementType, arg) }
-        node.resolvedType = arrayType
-      }
-      else {
-        // Call the type's constructor, which just has one argument
-        Type type = metaType.instanceType
-        Type argType = type
-        if type == ClassType.INT { argType = ClassType.FLOAT }
-        visitCallArgs(node.location, { type, { argType }, 1 }, node.args)
-        node.resolvedType = type
+      if CtorCallInfo info = callCtor(node.location, node.args, metaType.instanceType) {
+        node.ctorSymbol = info.ctorSymbol
+        node.resolvedType = info.resolvedType
       }
     }
     else if (node.value is ThisExpr or node.value is BaseExpr) and
@@ -725,8 +768,8 @@ class ResolveTypesPass is Pass {
 
   over void visitIndexExpr(IndexExpr node) {
     base.visitIndexExpr(node)
-    if ArrayType arrayType = node.value.resolvedType {
-      node.resolvedType = arrayType.elementType
+    if SpecificType type = node.value.resolvedType and type.classType == ClassType.ARRAY {
+      node.resolvedType = type.paramTypes[0]
       checkConversion(node.location, node.index.resolvedType, ClassType.INT)
     }
     else if node.value.resolvedType == ClassType.STRING {
@@ -744,19 +787,22 @@ class ResolveTypesPass is Pass {
 
     // Find the scope to look in for the member
     Scope? maybeScope = null
+    Type[] paramTypes = {}
     if MetaType metaType = node.value.resolvedType {
       if ClassType classType = metaType.instanceType {
         maybeScope = classType.staticScope
       }
-      else if node.value.resolvedType is ArrayType {
-        maybeScope = SpecialScope.ARRAY_STATIC
+      else if SpecificType instantiatedType = metaType.instanceType {
+        maybeScope = instantiatedType.classType.staticScope
+        paramTypes = instantiatedType.paramTypes
       }
     }
     else if ClassType classType = node.value.resolvedType {
       maybeScope = classType.instanceScope
     }
-    else if node.value.resolvedType is ArrayType {
-      maybeScope = SpecialScope.ARRAY_INSTANCE
+    else if SpecificType instantiatedType = node.value.resolvedType {
+      maybeScope = instantiatedType.classType.instanceScope
+      paramTypes = instantiatedType.paramTypes
     }
     else if node.value.resolvedType == SpecialType.VAR {
       node.resolvedType = SpecialType.VAR
@@ -769,13 +815,7 @@ class ResolveTypesPass is Pass {
       if Symbol symbol = scope.lookup(node.id.name, true) {
         node.id.symbol = symbol
         node.resolvedType = symbol.type
-        if ArrayType arrayType = node.value.resolvedType {
-          node.resolvedType = Type.removeParams(node.resolvedType, { arrayType.elementType })
-        }
-        else if MetaType metaType = node.value.resolvedType and
-            ArrayType arrayType = metaType.instanceType {
-          node.resolvedType = Type.removeParams(node.resolvedType, { arrayType.elementType })
-        }
+        if paramTypes.size > 0 { node.resolvedType = Type.removeParams(node.resolvedType, paramTypes) }
       }
       else { log.error(node.location, 'no member "' + node.id.name + '" on ' + node.value.resolvedType) }
     }
@@ -784,35 +824,23 @@ class ResolveTypesPass is Pass {
 
   over void visitInitExpr(InitExpr node) {
     if TypeContext context = context and context.node == node {
-      if ArrayType arrayType = context.targetType {
-        for value in node.values {
-          visitWithContext(arrayType.elementType, value)
-          checkConversion(value.location, value.resolvedType, arrayType.elementType)
-        }
-        node.resolvedType = arrayType
+      if CtorCallInfo info = callCtor(node.location, node.values, context.targetType) {
+        node.ctorSymbol = info.ctorSymbol
+        node.resolvedType = info.resolvedType
       }
-      else if ClassType classType = context.targetType {
-        if classType.isAbstract {
-          log.error(node.location, 'cannot instantiate abstract class ' + classType)
-        }
-        else if Symbol ctorSymbol = classType.instanceScope.lookup('this', true) and FuncType funcType = ctorSymbol.type {
-          node.ctorSymbol = ctorSymbol
-          node.resolvedType = classType
-          visitCallArgs(node.location, funcType, node.values)
-        }
-        else { log.error(node.location, classType + ' has no constructor') }
-      }
-      else { log.error(node.location, context.targetType + ' has no constructor') }
     }
     else { log.error(node.location, 'need context to resolve initializer list type') }
   }
 
   over void visitMatchExpr(MatchExpr node) {
     base.visitMatchExpr(node)
-    if Symbol symbol = node.id.symbol and symbol.type == SpecialType.ERROR {
+    if Symbol symbol = node.id.symbol {
       symbol.type = instanceType(node.type, false)
       if node.value.resolvedType is not ClassType and node.value.resolvedType is not NullableType {
         log.error(node.location, 'expected value of class or nullable type for match expression but got ' + node.value.resolvedType)
+      }
+      else if symbol.type is NullableType {
+        log.error(node.location, 'cannot match on nullable type ' + symbol.type)
       }
       else { checkConversion(node.location, symbol.type, node.value.resolvedType) }
     }
@@ -858,7 +886,7 @@ class ResolveTypesPass is Pass {
     base.visitArrayTypeExpr(node)
     Type elementType = instanceType(node.elementType, false)
     if elementType != SpecialType.ERROR {
-      node.resolvedType = MetaType(ArrayType(elementType))
+      node.resolvedType = MetaType(SpecificType(ClassType.ARRAY, { elementType }))
     }
   }
 
@@ -867,10 +895,10 @@ class ResolveTypesPass is Pass {
     Type returnType = instanceType(node.returnType, true)
     if returnType == SpecialType.ERROR { return }
     Type[] argTypes = {}
-    for arg in node.args {
-      Type argType = instanceType(arg, false)
-      if argType == SpecialType.ERROR { return }
-      argTypes.push(argType)
+    for argType in node.argTypes {
+      Type type = instanceType(argType, false)
+      if type == SpecialType.ERROR { return }
+      argTypes.push(type)
     }
     node.resolvedType = MetaType(FuncType(returnType, argTypes, argTypes.size))
   }
@@ -887,6 +915,27 @@ class ResolveTypesPass is Pass {
     else if innerType != SpecialType.ERROR {
       node.resolvedType = MetaType(NullableType(innerType))
     }
+  }
+
+  over void visitSpecificTypeExpr(SpecificTypeExpr node) {
+    base.visitSpecificTypeExpr(node)
+    Type classType = instanceType(node.classType, false)
+    if ClassType classType = classType and classType.params.size > 0 {
+      if classType.isAbstract {
+        log.error(node.location, 'cannot instantiate abstract class ' + classType)
+      }
+      else if classType.params.size == node.paramTypes.size {
+        Type[] paramTypes = {}
+        for param in node.paramTypes {
+          Type type = instanceType(param, false)
+          if type == SpecialType.ERROR { return }
+          paramTypes.push(type)
+        }
+        node.resolvedType = MetaType(SpecificType(classType, paramTypes))
+      }
+      else { log.error(node.location, 'expected ' + classType.params.size + ' type parameters but got ' + node.paramTypes.size) }
+    }
+    else { log.error(node.location, classType + ' has no free type parameters') }
   }
 
   over void visitTypeExpr(TypeExpr node) {

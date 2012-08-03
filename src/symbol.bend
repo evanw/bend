@@ -9,6 +9,7 @@ class Modifier {
 class SymbolKind {
   DUMMY
   CLASS
+  PARAM
   VARIABLE
   FUNCTION
 }

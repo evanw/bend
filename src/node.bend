@@ -73,7 +73,7 @@ abstract class Def is Stmt { IdentExpr id; int modifiers }
 class VarDef is Def { Expr type; Expr? value; bool isSplat = false;          over void accept(Visitor v) { v.visitVarDef(this) } }
 class FuncDef is Def { Expr returnType; VarDef[] args; Block? body;          over void accept(Visitor v) { v.visitFuncDef(this) } }
 class CtorDef is Def { VarDef[] args; Block? body;                           over void accept(Visitor v) { v.visitCtorDef(this) } }
-class ClassDef is Def { Expr? baseType; Block body;                          over void accept(Visitor v) { v.visitClassDef(this) } }
+class ClassDef is Def { Expr? baseType; Block body; TypeParam[] params;      over void accept(Visitor v) { v.visitClassDef(this) } }
 
 ////////////////////////////////////////////////////////////////////////////////
 // Expressions
@@ -90,8 +90,9 @@ class InitExpr is Expr { Expr[] values; Symbol? ctorSymbol = null;           ove
 class MatchExpr is Expr { IdentExpr id; Expr type; Expr value;               over void accept(Visitor v) { v.visitMatchExpr(this) } }
 class LambdaExpr is Expr { IdentExpr[] args; Block body;                     over void accept(Visitor v) { v.visitLambdaExpr(this) } }
 class ArrayTypeExpr is Expr { Expr elementType;                              over void accept(Visitor v) { v.visitArrayTypeExpr(this) } }
-class FuncTypeExpr is Expr { Expr returnType; Expr[] args;                   over void accept(Visitor v) { v.visitFuncTypeExpr(this) } }
+class FuncTypeExpr is Expr { Expr returnType; Expr[] argTypes;               over void accept(Visitor v) { v.visitFuncTypeExpr(this) } }
 class NullableTypeExpr is Expr { Expr innerType;                             over void accept(Visitor v) { v.visitNullableTypeExpr(this) } }
+class SpecificTypeExpr is Expr { Expr classType; Expr[] paramTypes;      over void accept(Visitor v) { v.visitSpecificTypeExpr(this) } }
 
 ////////////////////////////////////////////////////////////////////////////////
 // Literals
@@ -215,10 +216,14 @@ class Visitor {
   }
   void visitFuncTypeExpr(FuncTypeExpr node) {
     visit(node.returnType)
-    for arg in node.args { visit(arg) }
+    for argType in node.argTypes { visit(argType) }
   }
   void visitNullableTypeExpr(NullableTypeExpr node) {
     visit(node.innerType)
+  }
+  void visitSpecificTypeExpr(SpecificTypeExpr node) {
+    visit(node.classType)
+    for paramType in node.paramTypes { visit(paramType) }
   }
 
   // Literals

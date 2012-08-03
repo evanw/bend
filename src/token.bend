@@ -94,6 +94,8 @@ class TokenKind {
   // Other
   LARGS = { 'LARGS', null }
   RARGS = { 'RARGS', null }
+  LPARAM = { 'LPARAM', null }
+  RPARAM = { 'RPARAM', null }
   IS_NOT = { 'IS_NOT', null }
   NOT_IN = { 'NOT_IN', null }
   NEWLINE = { 'NEWLINE', null }
@@ -192,12 +194,18 @@ class TokenKind {
     LPAREN
     LBRACKET
     LBRACE
+    LARGS
+    LT
   }
 
   static TokenKind[] RIGHT_BRACKETS = {
     RPAREN
     RBRACKET
     RBRACE
+    RARGS
+    GT
+    SHR
+    GTE
   }
 
   static TokenKind[] REMOVE_NEWLINE_BEFORE = {
@@ -257,6 +265,27 @@ class TokenKind {
     IS
     IN
     NOT
+  }
+
+  static TokenKind[] TYPE_PARAMETER_LIST = {
+    TokenKind.IDENT
+    TokenKind.DOT
+    TokenKind.COMMA
+    TokenKind.LT
+    TokenKind.GT
+    TokenKind.VOID
+    TokenKind.INT
+    TokenKind.BOOL
+    TokenKind.FLOAT
+    TokenKind.STRING
+    TokenKind.LBRACKET
+    TokenKind.RBRACKET
+    TokenKind.LARGS
+    TokenKind.RARGS
+    TokenKind.FN
+    TokenKind.SHR
+    TokenKind.GTE
+    TokenKind.QUESTION
   }
 }
 
@@ -490,16 +519,59 @@ class Tokenizer {
         continue
       }
 
+      // Type parameters are able to be specified via angle brackets because
+      // of tokenizer tricks below. Some of the tricky cases are:
+      //
+      //     (x < y) > z
+      //     x < (y > z)
+      //     x < y and y > z
+      //     x < y<z>()
+      //
+      // These are handled by keeping track of nested brackets for (), [], {},
+      // and <> using a stack, and converting matching <> to type parameter
+      // start and end tokens. To handle the less-than operator, if anything
+      // other than an identifier, a dot, a comma, or an angle bracket is
+      // encountered, all less-than tokens on the top of the stack are discarded.
+
+      // Change parantheses to tokens for function types
+      if token.kind == TokenKind.LPAREN and i >= 2 and tokens[i - 2].kind == TokenKind.FN {
+        token.kind = TokenKind.LARGS
+      }
+      else if token.kind == TokenKind.RPAREN and stack.size > 0 and stack[stack.size - 1].kind == TokenKind.LARGS {
+        token.kind = TokenKind.RARGS
+      }
+
+      // Break out of all type parameter lists for non-special tokens
+      if token.kind not in TokenKind.TYPE_PARAMETER_LIST {
+        while stack.size > 0 and stack[stack.size - 1].kind == TokenKind.LT {
+          stack.pop()
+        }
+      }
+
       // Keep track of the current bracket nesting using a stack
       if token.kind in TokenKind.LEFT_BRACKETS { stack.push(token) }
       else if stack.size > 0 and token.kind in TokenKind.RIGHT_BRACKETS {
         Token top = stack.pop()
 
-        // Convert parentheses to lambda argument tokens
+        // Convert parentheses to argument tokens for lambdas
         if top.kind == TokenKind.LPAREN and token.kind == TokenKind.RPAREN and
             i < tokens.size and tokens[i].kind == TokenKind.ARROW {
           top.kind = TokenKind.LARGS
           token.kind = TokenKind.RARGS
+        }
+
+        // Convert angle brackets to type parameter tokens, splitting compound tokens
+        if top.kind == TokenKind.LT {
+          if token.kind == TokenKind.SHR {
+            tokens.splice(i, 0, { token.location, TokenKind.GT, '>' })
+            token.text = '>'
+          }
+          else if token.kind == TokenKind.GTE {
+            tokens.splice(i, 0, { token.location, TokenKind.ASSIGN, '=' })
+            token.text = '>'
+          }
+          top.kind = TokenKind.LPARAM
+          token.kind = TokenKind.RPARAM
         }
       }
     }

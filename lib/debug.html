@@ -57,7 +57,9 @@
           }
         }
         else if (value instanceof Array) {
-          value = '{\n' + indent(value.map(printNode).join('\n')) + '}';
+          value = '{\n' + indent(value.map(function(x) {
+            return x instanceof Node ? printNode(x) : x;
+          }).join('\n')) + '}';
         }
         else if (typeof value == 'string') value = JSON.stringify(value);
         return indent(name + ' = ' + value);
@@ -98,6 +100,7 @@
         'ArrayTypeExpr',
         'FuncTypeExpr',
         'NullableTypeExpr',
+        'SpecificTypeExpr',
 
         // Literals
         'TypeExpr',
