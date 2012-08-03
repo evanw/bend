@@ -1,0 +1,345 @@
+<html>
+  <head>
+    <title>The Bend Programming Language</title>
+    <script src="compiler.js"></script>
+    <script src="codemirror/codemirror.js"></script>
+    <script src="codemirror/javascript.js"></script>
+    <script src="codemirror/bend.js"></script>
+    <link rel="stylesheet" href="codemirror/codemirror.css">
+    <link rel="stylesheet" href="codemirror/monokai.css">
+    <script>
+      function createEditor(text) {
+        var editor = document.createElement('div');
+        editor.className = 'editor';
+        document.body.appendChild(editor);
+
+        var container = document.createElement('div');
+        container.className = 'container'
+        editor.appendChild(container);
+
+        var bend = CodeMirror(container, {
+          theme: 'monokai',
+          value: text,
+          tabSize: 2,
+          lineNumbers: true,
+          lineWrapping: true,
+          mode: 'text/x-bend',
+          onChange: recompile
+        });
+
+        var separator = document.createElement('div');
+        separator.className = 'separator';
+        container.appendChild(separator);
+
+        var javascript = CodeMirror(container, {
+          theme: 'monokai',
+          tabSize: 2,
+          readOnly: 'nocursor',
+          lineNumbers: true,
+          lineWrapping: true,
+          mode: 'text/javascript'
+        });
+
+        function recompile() {
+          var compiler = new Compiler();
+          compiler.addFile(null, bend.getValue());
+          var module = null;
+          var output = '';
+          try { module = compiler.compile(); }
+          catch (e) { output += '/*\n' + (e.stack || e) + '\n*/'; }
+          if (compiler.log.messages.length) {
+            output += compiler.log.messages.map(function(message) {
+              return '// ' + message + '\n';
+            }).join('');
+          }
+          if (module) {
+            if (output.length) output += '\n';
+            try { output += JavaScript.convert(module); }
+            catch (e) { output += '/*\n' + (e.stack || e) + '\n*/'; }
+          }
+          if (output.length && output[output.length - 1] == '\n') output = output.slice(0, -1);
+          javascript.setValue(output);
+        }
+
+        recompile();
+        return bend;
+      }
+    </script>
+    <style type="text/css">
+      @import url(http://fonts.googleapis.com/css?family=Fredericka+the+Great);
+      body {
+        margin: 50px 0 100px 0;
+        background: #20211C;
+        color: #A7A599;
+        font: 14px/18px Arial, sans-serif;
+      }
+      .container {
+        margin: 0 auto;
+        padding: 0 50px;
+        max-width: 800px;
+      }
+      .editor {
+        background: #272822;
+        padding: 6px 0 3px 0;
+        color: #464742;
+      }
+      .separator {
+        margin: 0.4em 0;
+        border-top: 1px dotted #464741;
+      }
+      h1 {
+        font: 150px/150px 'Fredericka the Great', Georgia, serif;
+        text-align: center;
+        margin: 0;
+        color: white;
+      }
+      h2 {
+        font: 75px/75px 'Fredericka the Great', Georgia, serif;
+        margin: 100px 0 0 0;
+        color: white;
+      }
+      p {
+        margin: 20px 0;
+      }
+      b {
+        color: white;
+      }
+      a {
+        color: inherit;
+      }
+      pre, .CodeMirror {
+        font: 12px/16px Menlo, monospace;
+      }
+      pre {
+        color: white;
+        padding: 10px;
+        background: #171814;
+        border-radius: 10px;
+      }
+      .CodeMirror {
+        margin-left: -2.4em;
+      }
+      .CodeMirror-scroll {
+        height: auto;
+        overflow-x: auto;
+        overflow-y: hidden;
+        width: 100%;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="container">
+      <h1>bend</h1>
+      <p>
+        Bend is a statically-typed programming language for the web.
+        It compiles down to readable JavaScript with no runtime library and easily integrates with other JavaScript code.
+      </p>
+      <h2>try it</h2>
+      <p>
+        Enter your Bend code in the top half of the box below and it will be compiled to JavaScript in the bottom half.
+      </p>
+    </div>
+    <script>createEditor('\
+extern class console {\n\
+  static void log(var[] data...)\n\
+}\n\
+int[] nums = { 1, 2, 3 }\n\
+for n in nums {\n\
+  console.log(\'hello\', n)\n\
+}\
+').focus();</script>
+    <div class="container">
+      <h2>get it</h2>
+      <p>
+        Keep in mind that this project is still experimental.
+        It has just recently reached the point of being useful but is still very much unfinished.
+        There are still many more features coming (generics and operator overloading, for example) as well as language and implementation bugs to fix.
+      </p>
+      <p>
+        The compiler is self-hosting (written in Bend) and is available at <a href="https://github.com/evanw/bend">https://github.com/evanw/bend</a>.
+        It's also available on <a href="https://npmjs.org/">npm</a>:
+      </p>
+      <pre>npm install -g bend</pre>
+      <p>
+        After installing, the compiler will be available as the "bend" command.
+      </p>
+    </div>
+    <div class="container">
+      <h2>features</h2>
+      <p>
+        This section is meant to highlight the differences between Bend and other languages and is not meant to be a complete reference.
+        It is roughly structured top to bottom so features later on assume knowledge of previous features.
+        All code examples are live and can be edited, which will update the compiled JavaScript automatically.
+      </p>
+      <p>
+        <b>Syntax</b> is a blend of C and Python.
+        Control structures use curly braces without parentheses, some operators are keywords instead of symbols, and newlines terminate statements.
+        Single-line comments are part of the grammar so they can be preserved in the output.
+      </p>
+    </div>
+    <script>createEditor('\
+// Single-line comments are part of the grammar and apply to the next statement\n\
+if true or false {\n\
+  /+\n\
+   + Multi-line comments /+ nest +/ and are ignored (removed before parsing)\n\
+   +/\n\
+  for c in \'string\' { if c not in \'string\' { fail } }\n\
+}\
+');</script>
+    <div class="container">
+      <p>
+        <b>Default constructors</b> are automatically generated for classes without a constructor.
+      </p>
+    </div>
+    <script>createEditor('\
+// Link has a default constructor\n\
+class Link {\n\
+  int data\n\
+  Link? next = null\n\
+}\n\
+\n\
+// The NamedLink constructor can be automatically generated (delete it and see)\n\
+class NamedLink is Link {\n\
+  string name\n\
+  this(int data, string name) { base(data); this.name = name }\n\
+}\n\
+\n\
+Link first = Link(1)\n\
+first.next = NamedLink(1, \'second\')\
+');</script>
+    <div class="container">
+      <p>
+        <b>Initializer lists</b> provide a shorter way to call constructors.
+        They can only be used where the type can be inferred (as the right-hand side of an assignment or as an argument to a function call).
+      </p>
+    </div>
+    <script>createEditor('\
+class NamedList { string name; int[] ints }\n\
+NamedList list = { \'first\', { 1, 2, 3 } }\n\
+\n\
+// Newlines can also separate items instead of commas\n\
+NamedList[] lists = {\n\
+  { \'second\', { 4, 5 } }\n\
+  { \'third\', { 6, 7, 8, 9 } }\n\
+}\
+');</script>
+    <div class="container">
+      <p>
+        <b>Lambdas</b> must also be used where the type can be inferred (as the right-hand side of an assignment or as an argument to a function call).
+      </p>
+    </div>
+    <script>createEditor('\
+int fn() noArgs = -> 0\n\
+int fn() noArgsBlock = -> { return 0 }\n\
+\n\
+int fn(int) oneArg = arg -> 1\n\
+int fn(int) oneArgBlock = arg -> { return 1 }\n\
+\n\
+int fn(int, int) twoArgs = (arg1, arg2) -> 2\n\
+int fn(int, int) twoArgsBlock = (arg1, arg2) -> { return 2 }\
+');</script>
+    <div class="container">
+      <p>
+        <b>Nullable types</b> are denoted by a question mark after the type.
+        Null safety is ensured by requiring a nullable value to be checked with a match expression before using it.
+      </p>
+    </div>
+    <script>createEditor('\
+int x = 0\n\
+/+ int y = null +/\n\
+int? z = null\n\
+/+ x = z +/\n\
+if int i = z { x = i }\
+');</script>
+    <div class="container">
+      <p>
+        <b>Match expressions</b> are a concise way to check if a value is of a certain type and then manipulate that value as that more specific type.
+        Each match expression introduces a new scope and variable only for the code that will run if the match expression evaluates to true.
+      </p>
+    </div>
+    <script>createEditor('\
+extern class Field { string text }\n\
+extern class EmailField is Field { string domain() }\n\
+\n\
+bool validate(Field field) {\n\
+  if EmailField emailField = field and \'.\' not in emailField.domain() {\n\
+    return false\n\
+  }\n\
+  return true\n\
+}\
+');</script>
+    <div class="container">
+      <p>
+        <b>Enums</b> can be simulated using classes and static variables.
+        This is more powerful than the integer constant approach since each instance can hold additional data.
+        To make this more concise, free identifiers in class definitions are automatically converted to static variable declarations that each hold an instance of the class.
+      </p>
+    </div>
+    <script>createEditor('\
+class Dir {\n\
+  NORTH\n\
+  SOUTH\n\
+  EAST\n\
+  WEST\n\
+}\n\
+\n\
+class NamedDir {\n\
+  string name\n\
+  NORTH = { \'North\' }\n\
+  SOUTH = { \'South\' }\n\
+  EAST = { \'East\' }\n\
+  WEST = { \'West\' }\n\
+}\
+');</script>
+    <div class="container">
+      <p>
+        <b>Unchecked variables</b> use the type "var" and provide an easy way to integrate with existing code.
+        Type errors are silently ignored for almost all expressions containing unchecked variables.
+      </p>
+    </div>
+    <script>createEditor('\
+extern var document\n\
+var logo = document.getElementById(\'logo\')\n\
+logo.onmouseover = e -> { e.className = \'logo hover\' }\n\
+logo.onmouseout = e -> { e.className = \'logo\' }\
+');</script>
+    <div class="container">
+      <p>
+        <b>Sane scoping rules</b> maintain intuitive behavior for variables inside lambdas.
+      </p>
+    </div>
+    <script>createEditor('\
+extern var window\n\
+\n\
+// An alias for "this" will automatically be inserted when needed\n\
+class Button {\n\
+  string value\n\
+  void attach() { window.onclick = -> { window.alert(value) } }\n\
+}\n\
+\n\
+// Variables inside loops are not hoisted like they are in JavaScript\n\
+int[] ints = { 1, 2, 3 }\n\
+int fn()[] funcs = {}\n\
+for i in ints { funcs.push(-> i) }\
+');</script>
+    <div class="container">
+      <p>
+        <b>Argument splats</b> allow functions to take an arbitrarily large number of arguments.
+      </p>
+    </div>
+    <script>createEditor('\
+string format(string text, var[] args...) {\n\
+  int zero = \'0\'.charCodeAt(0)\n\
+  bool percent = false\n\
+  string output = \'\'\n\
+  for c in text {\n\
+    if percent { output += args[c.charCodeAt(0) - zero]; percent = false }\n\
+    else if c == \'%\' { percent = true }\n\
+    else { output += c }\n\
+  }\n\
+  return output\n\
+}\n\
+format(\'%0 + %1 = %2\', 1, 2, 1 + 2)\
+');</script>
+  </body>
+</html>
