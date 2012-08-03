@@ -1,0 +1,23 @@
+{
+  "name": "bend",
+  "preferGlobal": "true",
+  "version": "0.1.0",
+  "author": "Evan Wallace (http://madebyevan.com/)",
+  "description": "A statically-typed programming language that compiles into JavaScript",
+  "bin": {
+    "bend": "./bin/bend"
+  },
+  "main": "./lib/compiler.node.js",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/evanw/bend.git"
+  },
+  "keywords": [
+    "javascript",
+    "bend",
+    "language",
+    "compiler"
+  ],
+  "bugs": "http://github.com/evanw/bend/issues",
+  "license": "MIT"
+}

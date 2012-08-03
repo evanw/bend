@@ -1,0 +1,153 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <title>The Bend Programming Language</title>
+    <script src="../build/compiler.browser.js"></script>
+    <style>
+      body { font: 14px Helvetica, sans-serif; margin: 40px 0; }
+      pre, textarea { font: 14px Inconsolata, monospace; }
+      h1, h2, pre, textarea, p { margin: 20px 40px; }
+    </style>
+  </head>
+  <body>
+    <h1>Bend</h1>
+    <p>Enter your Bend code below to display a detailed parse tree.</p>
+
+    <h2>Input</h2>
+    <textarea id="input" rows="10" cols="100"></textarea>
+
+    <h2>Log</h2>
+    <pre id="log"></pre>
+
+    <h2>JavaScript</h2>
+    <pre id="js"></pre>
+
+    <h2>Tree</h2>
+    <pre id="tree"></pre>
+
+    <h2>Tokens</h2>
+    <pre id="tokens"></pre>
+
+    <script>
+      function indent(text) {
+        if (text == '') return '';
+        return text.split('\n').map(function(line) { return '  ' + line + '\n'; }).join('');
+      }
+
+      function findEnum(Enum, value) {
+        for (var name in Enum) {
+          if (Enum[name] == value) {
+            return name;
+          }
+        }
+      }
+
+      function field(name, value) {
+        if (value instanceof Node) value = printNode(value);
+        else if (value instanceof UnaryOp) value = 'UnaryOp.' + findEnum(UnaryOp, value);
+        else if (value instanceof BinaryOp) value = 'BinaryOp.' + findEnum(BinaryOp, value);
+        else if (value instanceof Scope) {
+          var scope = value;
+          value = '';
+          while (scope) {
+            if (value != '') value += ' -> ';
+            value += findEnum(ScopeKind, scope.kind);
+            if (scope.symbol) value += ' ' + scope.symbol.name;
+            scope = scope.parentScope;
+          }
+        }
+        else if (value instanceof Array) {
+          value = '{\n' + indent(value.map(printNode).join('\n')) + '}';
+        }
+        else if (typeof value == 'string') value = JSON.stringify(value);
+        return indent(name + ' = ' + value);
+      }
+
+      var nodeNames = [
+        // Nodes
+        'Module',
+        'Block',
+
+        // Statements
+        'ExprStmt',
+        'IfStmt',
+        'WhileStmt',
+        'ForStmt',
+        'ContinueStmt',
+        'BreakStmt',
+        'FailStmt',
+        'ReturnStmt',
+        'CommentStmt',
+
+        // Definitions
+        'VarDef',
+        'FuncDef',
+        'CtorDef',
+        'ClassDef',
+
+        // Expressions
+        'UnaryExpr',
+        'BinaryExpr',
+        'TertiaryExpr',
+        'CallExpr',
+        'IndexExpr',
+        'MemberExpr',
+        'InitExpr',
+        'MatchExpr',
+        'LambdaExpr',
+        'ArrayTypeExpr',
+        'FuncTypeExpr',
+        'NullableTypeExpr',
+
+        // Literals
+        'TypeExpr',
+        'ThisExpr',
+        'BaseExpr',
+        'IdentExpr',
+        'IntExpr',
+        'BoolExpr',
+        'FloatExpr',
+        'StringExpr'
+      ];
+
+      function printNode(node) {
+        var fields = [];
+        if (node == null || typeof node == 'string') return JSON.stringify(node);
+        for (var name in node) {
+          if (node.hasOwnProperty(name)) {
+            fields.push(field(name, node[name]));
+          }
+        }
+        for (var i = 0; i < nodeNames.length; i++) {
+          if (node instanceof window[nodeNames[i]]) {
+            return nodeNames[i] + ' {\n' + fields.join('') + '}';
+          }
+        }
+        throw new Error();
+      }
+
+      var elements = {
+        input: document.getElementById('input'),
+        tokens: document.getElementById('tokens'),
+        tree: document.getElementById('tree'),
+        log: document.getElementById('log'),
+        js: document.getElementById('js')
+      };
+
+      elements.input.oninput = function() {
+        var compiler = new Compiler();
+        compiler.addFile(null, elements.input.value);
+        var module = compiler.compile();
+        elements.tokens.textContent = compiler.tokens.join('\n');
+        elements.tree.textContent = module ? printNode(module) : '';
+        elements.log.textContent = compiler.log.messages.join('\n');
+        elements.js.textContent = compiler.log.hasErrors ? '' : JavaScript.convert(module);
+        try { localStorage.bendInput = elements.input.value; } catch (e) {}
+      };
+
+      try { if ('bendInput' in localStorage) elements.input.value = localStorage.bendInput; } catch (e) {}
+      elements.input.focus();
+      elements.input.oninput();
+    </script>
+  </body>
+</html>
