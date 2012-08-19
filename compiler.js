@@ -1,3 +1,5 @@
+var ctorSymbol, funcType;
+
 // class Location
 var Location = function(file, line) {
   this.file = file;
@@ -1244,11 +1246,19 @@ Type.paramsFor = function(type) {
   }
   return [];
 };
+Type.isPrimitive = function(type) {
+  return [
+    ClassType.INT,
+    ClassType.BOOL,
+    ClassType.FLOAT,
+    ClassType.STRING
+  ].indexOf(type) >= 0;
+};
 Type.removeParams = function(type, params) {
   var type2, type3, type4, type5;
   if ((type2 = type) instanceof TypeParam) {
     if (type2.index >= params.length) {
-      throw new Error("fail in src/type.bend on line 11");
+      throw new Error("fail in src/type.bend on line 20");
     }
     return params[type2.index];
   }
@@ -1319,9 +1329,6 @@ Type.equals = function(a, b) {
 Type.canImplicitlyConvert = function(from, to) {
   var to2, from2, from3, to3, baseType;
   if (Type.equals(from, to)) {
-    return true;
-  }
-  if (from === ClassType.INT && to === ClassType.FLOAT) {
     return true;
   }
   if ((to2 = to) instanceof NullableType) {
@@ -1412,7 +1419,7 @@ var FuncType = function(returnType, argTypes, minArgCount) {
   this.returnType = returnType;
   this.argTypes = argTypes;
 
-  // If all arguments are required, minArgCount == argTypes.size
+  // If all arguments are required, minArgCount == argTypes.length
   this.minArgCount = minArgCount;
 
   // A splat can take zero or more arguments, -1 means no splat
@@ -1470,6 +1477,10 @@ ClassType.INT = ClassType.makeNative("int");
 ClassType.BOOL = ClassType.makeNative("bool");
 ClassType.FLOAT = ClassType.makeNative("float");
 ClassType.STRING = ClassType.makeNative("string");
+ClassType.INT.baseType = ClassType.FLOAT;
+if ((ctorSymbol = ClassType.INT.instanceScope.find("this")) !== null && (funcType = ctorSymbol.type) instanceof FuncType) {
+  funcType.argTypes[0] = ClassType.FLOAT;
+}
 
 // class Parselet
 var Parselet = function(kind, leftBindingPower) {
@@ -2843,6 +2854,8 @@ CheckOverridePass.prototype.visitFuncDef = function(node) {
     this.log.error(node.location, "function \"" + node.id.name + "\" overrides a function in a base class and must be marked \"over\"");
   } else if (!overridesSymbol && shouldOverrideSymbol) {
     this.log.error(node.location, "function \"" + node.id.name + "\" is marked \"over\" but doesn't override anything");
+  } else if (overridesSymbol && node.body === null) {
+    this.log.error(node.location, "function \"" + node.id.name + "\" cannot be an override without a function body");
   }
 };
 
@@ -3011,8 +3024,10 @@ ResolveTypesPass.prototype.visitExprStmt = function(node) {
   this.checkForValue(node.value);
 };
 ResolveTypesPass.prototype.visitIfStmt = function(node) {
-  Pass.prototype.visitIfStmt.call(this, node);
+  this.visit(node.value);
   this.checkConversion(node.value.location, node.value.resolvedType, ClassType.BOOL);
+  this.visit(node.trueBody);
+  this.visit(node.falseBody);
 };
 ResolveTypesPass.prototype.visitWhileStmt = function(node) {
   Pass.prototype.visitWhileStmt.call(this, node);
@@ -3113,14 +3128,16 @@ ResolveTypesPass.prototype.visitBinaryExpr = function(node) {
 };
 ResolveTypesPass.prototype.visitTertiaryExpr = function(node) {
   var context;
+  this.visit(node.value);
+  this.checkConversion(node.value.location, node.value.resolvedType, ClassType.BOOL);
   if ((context = this.context) !== null && context.node === node) {
-    this.visit(node.value);
     this.visitWithContext(context.targetType, node.trueValue);
     this.visitWithContext(context.targetType, node.falseValue);
     this.checkConversion(node.trueValue.location, node.trueValue.resolvedType, context.targetType);
     this.checkConversion(node.falseValue.location, node.falseValue.resolvedType, context.targetType);
   } else {
-    Pass.prototype.visitTertiaryExpr.call(this, node);
+    this.visit(node.trueValue);
+    this.visit(node.falseValue);
   }
 };
 ResolveTypesPass.prototype.visitCallExpr = function(node) {
@@ -3139,7 +3156,7 @@ ResolveTypesPass.prototype.visitCallExpr = function(node) {
         if ((ctorSymbol = node.ctorSymbol) !== null && (funcType2 = ctorSymbol.type) instanceof FuncType) {
           this.visitCallArgs(node.location, funcType2, node.args);
         } else {
-          throw new Error("fail in src/pass.bend on line 693");
+          throw new Error("fail in src/pass.bend on line 702");
         }
       }
     } else if ((arrayType = metaType.instanceType) instanceof ArrayType) {
@@ -3165,7 +3182,7 @@ ResolveTypesPass.prototype.visitCallExpr = function(node) {
     if ((ctorSymbol2 = node.ctorSymbol) !== null && (funcType3 = ctorSymbol2.type) instanceof FuncType) {
       this.visitCallArgs(node.location, funcType3, node.args);
     } else {
-      throw new Error("fail in src/pass.bend on line 717");
+      throw new Error("fail in src/pass.bend on line 726");
     }
   } else if (node.value.resolvedType === SpecialType.VAR) {
     for (var i = 0; i < node.args.length; i++) {
@@ -3263,8 +3280,10 @@ ResolveTypesPass.prototype.visitMatchExpr = function(node) {
   Pass.prototype.visitMatchExpr.call(this, node);
   if ((symbol = node.id.symbol) !== null && symbol.type === SpecialType.ERROR) {
     symbol.type = this.instanceType(node.type, false);
-    if (!(node.value.resolvedType instanceof ClassType) && !(node.value.resolvedType instanceof NullableType)) {
-      this.log.error(node.location, "expected value of class or nullable type for match expression but got " + node.value.resolvedType);
+    if (symbol.type instanceof NullableType) {
+      this.log.error(node.location, "cannot match on nullable type " + symbol.type);
+    } else if ((Type.isPrimitive(symbol.type) || !(symbol.type instanceof ClassType)) && !Type.equals(node.value.resolvedType, new NullableType(symbol.type))) {
+      this.log.error(node.location, "type " + symbol.type + " cannot be matched with " + node.value.resolvedType + ", only with " + new NullableType(symbol.type));
     } else {
       this.checkConversion(node.location, symbol.type, node.value.resolvedType);
     }
@@ -3393,8 +3412,6 @@ ResolveTypesPass.prototype.visitStringExpr = function(node) {
   node.resolvedType = ClassType.STRING;
 };
 
-// Native methods will be parsed from here
-
 // class SpecialScope
 var SpecialScope = function() {};
 SpecialScope.ARRAY_STATIC = new Scope(ScopeKind.STATIC, null, null);
@@ -3427,7 +3444,7 @@ SpecialScope.init = function() {
   SpecialScope.func(FLOAT.instanceScope, "toString", new FuncType(STRING, [], 0));
   SpecialScope.func(STRING.instanceScope, "toString", new FuncType(STRING, [], 0));
   SpecialScope.func(INT.instanceScope, "toHex", new FuncType(STRING, [], 0));
-  SpecialScope.field(STRING.instanceScope, "size", INT);
+  SpecialScope.field(STRING.instanceScope, "length", INT);
   SpecialScope.func(STRING.staticScope, "fromCharCode", new FuncType(STRING, [INT], 1));
   SpecialScope.func(STRING.instanceScope, "quote", new FuncType(STRING, [STRING], 1));
   SpecialScope.func(STRING.instanceScope, "slice", new FuncType(STRING, [INT, INT], 1));
@@ -3441,7 +3458,7 @@ SpecialScope.init = function() {
   SpecialScope.func(STRING.instanceScope, "toUpperCase", new FuncType(STRING, [], 0));
   SpecialScope.func(STRING.instanceScope, "indexOf", new FuncType(INT, [STRING], 1));
   SpecialScope.func(STRING.instanceScope, "charCodeAt", new FuncType(INT, [INT], 1));
-  SpecialScope.field(SpecialScope.ARRAY_INSTANCE, "size", INT);
+  SpecialScope.field(SpecialScope.ARRAY_INSTANCE, "length", INT);
   SpecialScope.func(SpecialScope.ARRAY_INSTANCE, "push", new FuncType(VOID, [T0], 1));
   SpecialScope.func(SpecialScope.ARRAY_INSTANCE, "pop", new FuncType(T0, [], 0));
   SpecialScope.func(SpecialScope.ARRAY_INSTANCE, "unshift", new FuncType(VOID, [T0], 1));
@@ -3518,7 +3535,7 @@ JsNative.get = function(scope, name) {
   if ((symbol = scope.find(name)) !== null) {
     return symbol;
   }
-  throw new Error("fail in src/native.bend on line 208");
+  throw new Error("fail in src/native.bend on line 112");
 };
 JsNative.escapeNonASCII = function(text) {
   var i = 0;
@@ -3544,7 +3561,7 @@ JsNative.escapeNonASCII = function(text) {
       } else if (word.length === 4) {
         word = "\\u" + word;
       } else {
-        throw new Error("fail in src/native.bend on line 233");
+        throw new Error("fail in src/native.bend on line 137");
       }
       text = text.slice(0, i - 1) + word + text.slice(i);
       i += word.length - 1;
@@ -4394,10 +4411,10 @@ JsConverter.prototype.generateFunction = function(scope, funcType, args, body) {
       jsArgs.push(new JsText(argName));
     } else if (i === funcType.splatIndex) {
       var end = funcType.splatIndex - funcType.argTypes.length + 1;
-      var callArgs = [
-        new JsText("arguments"),
-        new JsText(i.toString())
-      ];
+      var callArgs = [new JsText("arguments")];
+      if (i > 0 || end < 0) {
+        callArgs.push(new JsText(i.toString()));
+      }
       if (end < 0) {
         callArgs.push(new JsText(end.toString()));
       }
@@ -4448,7 +4465,7 @@ JsConverter.prototype.visitStmt = function(node) {
       }
       return [new JsWhile(this.visit(node4.value), body, label)];
     } else {
-      throw new Error("fail in src/js.bend on line 250");
+      throw new Error("fail in src/js.bend on line 251");
     }
   } else if ((node5 = node) instanceof ForStmt) {
     this.loops.push(null);
@@ -4491,7 +4508,7 @@ JsConverter.prototype.visitStmt = function(node) {
       // Combine everything into the full loop
       return [new JsFor(vars, new JsBinary(index, JsBinaryOp.LT, new JsBinary(array, JsBinaryOp.MEMBER, new JsText("length"))), new JsUnary(index, JsUnaryOp.POST_INC), body2, label2)];
     }
-    throw new Error("fail in src/js.bend on line 297");
+    throw new Error("fail in src/js.bend on line 298");
   } else if (node instanceof ContinueStmt || node instanceof BreakStmt) {
     // Extract the statement type and loop count
     var kind;
@@ -4549,7 +4566,7 @@ JsConverter.prototype.visitStmt = function(node) {
       }
       return this.makeVar(symbol2, null, node10.scope);
     } else {
-      throw new Error("fail in src/js.bend on line 356");
+      throw new Error("fail in src/js.bend on line 357");
     }
   } else if ((node11 = node) instanceof FuncDef) {
     var value5 = new JsText("null");
@@ -4559,7 +4576,7 @@ JsConverter.prototype.visitStmt = function(node) {
       }
       return this.makeVar(symbol3, value5, node11.scope);
     } else {
-      throw new Error("fail in src/js.bend on line 364");
+      throw new Error("fail in src/js.bend on line 365");
     }
   } else if ((node12 = node) instanceof ClassDef) {
     if ((node12.modifiers & Modifier.EXTERN) !== 0) {
@@ -4607,10 +4624,10 @@ JsConverter.prototype.visitStmt = function(node) {
       }
       return nodes.concat(this.visitStmts(node12.body.stmts));
     } else {
-      throw new Error("fail in src/js.bend on line 405");
+      throw new Error("fail in src/js.bend on line 406");
     }
   } else {
-    throw new Error("fail in src/js.bend on line 408");
+    throw new Error("fail in src/js.bend on line 409");
   }
 };
 JsConverter.applyDeMorgansTransform = function(node) {
@@ -4673,7 +4690,7 @@ JsConverter.prototype.declareVarsBeforeStmts = function(scope, stmts, createThis
   return nodes;
 };
 JsConverter.prototype.visit = function(node) {
-  var that = this, node2, node3, node4, symbol, funcType, body, node5, node6, node7, node8, value2, symbol2, baseValue, baseType, ctorSymbol, native, metaType, classType, classType2, memberExpr, symbol3, native2, metaType2, node9, node10, symbol4, symbol5, node11, nullableType, metaType3, node12, classType3, node13, symbol6, node14, metaType4, classType4, node15, node16, symbol7, env, node17, node18, node19, node20;
+  var that = this, node2, node3, node4, symbol, funcType, body, node5, node6, node7, node8, value2, symbol2, baseValue, baseType, ctorSymbol, native, metaType, classType, classType2, memberExpr, symbol3, native2, metaType2, node9, node10, symbol4, node11, nullableType, metaType3, node12, ctorSymbol2, native3, classType3, node13, symbol5, node14, metaType4, classType4, node15, node16, symbol6, env, node17, node18, node19, node20;
   if ((node2 = node) instanceof Module) {
     this.loopCaptures.visit(node2);
     return new JsFile(this.declareVarsBeforeStmts(node2.scope, node2.body.stmts, false));
@@ -4696,7 +4713,7 @@ JsConverter.prototype.visit = function(node) {
         return new JsUnary(value, info.jsOp);
       }
     }
-    throw new Error("fail in src/js.bend on line 503");
+    throw new Error("fail in src/js.bend on line 504");
   } else if ((node6 = node) instanceof BinaryExpr) {
     if (node6.op === BinaryOp.IN) {
       return new JsBinary(new JsCall(new JsBinary(this.visit(node6.right), JsBinaryOp.MEMBER, new JsText("indexOf")), [this.visit(node6.left)]), JsBinaryOp.GTE, new JsText("0"));
@@ -4712,7 +4729,7 @@ JsConverter.prototype.visit = function(node) {
         return new JsBinary(this.visit(node6.left), info2.jsOp, this.visit(node6.right));
       }
     }
-    throw new Error("fail in src/js.bend on line 519");
+    throw new Error("fail in src/js.bend on line 520");
   } else if ((node7 = node) instanceof TertiaryExpr) {
     return new JsTertiary(this.visit(node7.value), this.visit(node7.trueValue), this.visit(node7.falseValue));
   } else if ((node8 = node) instanceof CallExpr) {
@@ -4743,7 +4760,7 @@ JsConverter.prototype.visit = function(node) {
         }
         return new JsCall(new JsBinary(this.constructPrefix(this.prefixFromScope(classType2.staticScope)), JsBinaryOp.MEMBER, new JsText("call")), args3);
       } else {
-        throw new Error("fail in src/js.bend on line 547");
+        throw new Error("fail in src/js.bend on line 548");
       }
     } else if ((memberExpr = node8.value) instanceof MemberExpr && (symbol3 = memberExpr.id.symbol) !== null && (native2 = JsNative.handleCall(symbol3, memberExpr.value, node8.args, function(x) {
       return that.visit(x);
@@ -4762,7 +4779,7 @@ JsConverter.prototype.visit = function(node) {
         } else if ((metaType2.instanceType instanceof FuncType || metaType2.instanceType === SpecialType.VAR) && args4.length === 1) {
           return args4[0];
         } else {
-          throw new Error("fail in src/js.bend on line 565");
+          throw new Error("fail in src/js.bend on line 566");
         }
       }
       return new JsCall(this.visit(node8.value), args4);
@@ -4770,14 +4787,12 @@ JsConverter.prototype.visit = function(node) {
   } else if ((node9 = node) instanceof IndexExpr) {
     return new JsBinary(this.visit(node9.value), JsBinaryOp.INDEX, this.visit(node9.index));
   } else if ((node10 = node) instanceof MemberExpr) {
-    if ((node10.value.resolvedType === ClassType.STRING || node10.value.resolvedType instanceof ArrayType) && (symbol4 = node10.id.symbol) !== null && symbol4.name === "size") {
-      return new JsBinary(this.visit(node10.value), JsBinaryOp.MEMBER, new JsText("length"));
-    } else if (node10.value.resolvedType === SpecialType.VAR) {
+    if (node10.value.resolvedType === SpecialType.VAR) {
       return new JsBinary(this.visit(node10.value), JsBinaryOp.MEMBER, new JsText(node10.id.name));
-    } else if ((symbol5 = node10.id.symbol) !== null) {
-      return new JsBinary(this.visit(node10.value), JsBinaryOp.MEMBER, new JsText(symbol5.name));
+    } else if ((symbol4 = node10.id.symbol) !== null) {
+      return new JsBinary(this.visit(node10.value), JsBinaryOp.MEMBER, new JsText(symbol4.name));
     } else {
-      throw new Error("fail in src/js.bend on line 583");
+      throw new Error("fail in src/js.bend on line 581");
     }
   } else if ((node11 = node) instanceof MatchExpr) {
     if ((nullableType = node11.value.resolvedType) instanceof NullableType && (metaType3 = node11.type.resolvedType) instanceof MetaType && Type.equals(nullableType.innerType, metaType3.instanceType)) {
@@ -4785,27 +4800,36 @@ JsConverter.prototype.visit = function(node) {
     }
     return new JsBinary(new JsBinary(this.visit(node11.id), JsBinaryOp.ASSIGN, this.visit(node11.value)), JsBinaryOp.INSTANCEOF, this.visit(node11.type));
   } else if ((node12 = node) instanceof InitExpr) {
-    if ((classType3 = node12.resolvedType) instanceof ClassType) {
-      var values = [];
-      for (var i2 = 0; i2 < node12.values.length; i2++) {
-        var value3 = node12.values[i2];
-        values.push(this.visit(value3));
+    if ((ctorSymbol2 = node12.ctorSymbol) !== null) {
+      if ((native3 = JsNative.handleCall(ctorSymbol2, node12, node12.values, function(x) {
+        return that.visit(x);
+      })) !== null) {
+        return native3;
+      } else if ((classType3 = node12.resolvedType) instanceof ClassType) {
+        var values = [];
+        for (var i3 = 0; i3 < node12.values.length; i3++) {
+          var value3 = node12.values[i3];
+          values.push(this.visit(value3));
+        }
+        return new JsCall(new JsUnary(this.constructPrefix(this.prefixFromScope(classType3.staticScope)), JsUnaryOp.NEW), values);
+      } else {
+        throw new Error("fail in src/js.bend on line 607");
       }
-      return new JsCall(new JsUnary(this.constructPrefix(this.prefixFromScope(classType3.staticScope)), JsUnaryOp.NEW), values);
+    } else {
+      var nodes = [];
+      for (var i2 = 0; i2 < node12.values.length; i2++) {
+        var value4 = node12.values[i2];
+        nodes.push(this.visit(value4));
+      }
+      return new JsArray(nodes);
     }
-    var nodes = [];
-    for (var i3 = 0; i3 < node12.values.length; i3++) {
-      var value4 = node12.values[i3];
-      nodes.push(this.visit(value4));
-    }
-    return new JsArray(nodes);
   } else if ((node13 = node) instanceof LambdaExpr) {
     this.thisAlias.nestedFuncCount++;
     var args5 = [];
     for (var i = 0; i < node13.args.length; i++) {
       var arg5 = node13.args[i];
-      if ((symbol6 = arg5.symbol) !== null) {
-        args5.push(new JsText(symbol6.name));
+      if ((symbol5 = arg5.symbol) !== null) {
+        args5.push(new JsText(symbol5.name));
       }
     }
     var jsNode = new JsFunc(null, args5, new JsBlock(this.declareVarsBeforeStmts(node13.body.scope, node13.body.stmts, false)));
@@ -4823,16 +4847,16 @@ JsConverter.prototype.visit = function(node) {
   } else if ((node15 = node) instanceof ThisExpr) {
     return new JsText(this.thisAlias.resolveName());
   } else if ((node16 = node) instanceof IdentExpr) {
-    if ((symbol7 = node16.symbol) !== null) {
-      if ((env = this.envForSymbol(symbol7)) !== null) {
-        return new JsBinary(new JsText(env), JsBinaryOp.MEMBER, new JsText(symbol7.name));
+    if ((symbol6 = node16.symbol) !== null) {
+      if ((env = this.envForSymbol(symbol6)) !== null) {
+        return new JsBinary(new JsText(env), JsBinaryOp.MEMBER, new JsText(symbol6.name));
       }
-      if (symbol7.scope.kind === ScopeKind.INSTANCE) {
-        return new JsBinary(new JsText(this.thisAlias.resolveName()), JsBinaryOp.MEMBER, new JsText(symbol7.name));
+      if (symbol6.scope.kind === ScopeKind.INSTANCE) {
+        return new JsBinary(new JsText(this.thisAlias.resolveName()), JsBinaryOp.MEMBER, new JsText(symbol6.name));
       }
-      return this.constructPrefix(this.prefixFromScope(symbol7.scope).concat([symbol7.name]));
+      return this.constructPrefix(this.prefixFromScope(symbol6.scope).concat([symbol6.name]));
     } else {
-      throw new Error("fail in src/js.bend on line 641");
+      throw new Error("fail in src/js.bend on line 647");
     }
   } else if ((node17 = node) instanceof IntExpr) {
     return new JsText(node17.value + "");
@@ -4843,7 +4867,7 @@ JsConverter.prototype.visit = function(node) {
   } else if ((node20 = node) instanceof StringExpr) {
     return new JsText(JSON.stringify(node20.value));
   } else {
-    throw new Error("fail in src/js.bend on line 656");
+    throw new Error("fail in src/js.bend on line 662");
   }
 };
 
