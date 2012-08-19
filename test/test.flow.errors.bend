@@ -1,5 +1,5 @@
 /+
-TODO: all should fail
+TODO: a, b, and c should fail
 +/
 
 extern bool maybe
@@ -13,5 +13,19 @@ int b() {
 
 int c() {
   if maybe {}
+  else { return 0 }
+}
+
+int d() {
+  fail
+}
+
+int e() {
+  if maybe { return 1 }
+  fail
+}
+
+int f() {
+  if maybe { fail }
   else { return 0 }
 }

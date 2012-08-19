@@ -65,44 +65,20 @@ abstract class SpecialScope {
 }
 
 class JsNative {
-  class Handler0 {
+  class Handler {
     Symbol symbol
-    JsNode fn(JsNode fn(Expr), Expr) callback
+    JsNode? fn(JsNode fn(Expr), Expr, Expr[]) callback
   }
 
-  class Handler1 {
-    Symbol symbol
-    JsNode fn(JsNode fn(Expr), Expr, Expr) callback
+  static Handler[] handlers = {}
+
+  static void register(Symbol symbol, JsNode? fn(JsNode fn(Expr), Expr, Expr[]) callback) {
+    handlers.push({ symbol, callback })
   }
-
-  class Handler2 {
-    Symbol symbol
-    JsNode fn(JsNode fn(Expr), Expr, Expr, Expr) callback
-  }
-
-  static Handler0[] handlers0 = {}
-  static Handler1[] handlers1 = {}
-  static Handler2[] handlers2 = {}
-
-  static void register0(Symbol symbol, JsNode fn(JsNode fn(Expr), Expr) callback) { handlers0.push({ symbol, callback }) }
-  static void register1(Symbol symbol, JsNode fn(JsNode fn(Expr), Expr, Expr) callback) { handlers1.push({ symbol, callback }) }
-  static void register2(Symbol symbol, JsNode fn(JsNode fn(Expr), Expr, Expr, Expr) callback) { handlers2.push({ symbol, callback }) }
 
   static JsNode? handleCall(Symbol symbol, Expr target, Expr[] args, JsNode fn(Expr) visit) {
-    if args.length == 0 {
-      for handler in handlers0 {
-        if handler.symbol == symbol { return handler.callback(visit, target) }
-      }
-    }
-    else if args.length == 1 {
-      for handler in handlers1 {
-        if handler.symbol == symbol { return handler.callback(visit, target, args[0]) }
-      }
-    }
-    else if args.length == 2 {
-      for handler in handlers2 {
-        if handler.symbol == symbol { return handler.callback(visit, target, args[0], args[1]) }
-      }
+    for handler in handlers {
+      if handler.symbol == symbol { return handler.callback(visit, target, args) }
     }
     return null
   }
@@ -143,52 +119,52 @@ class JsNative {
   }
 
   static void init() {
-    register1(get(ClassType.INT.instanceScope, 'this'), (visit, target, arg0) ->
-      JsBinary(visit(arg0), JsBinaryOp.BITOR, JsText('0')))
+    register(get(ClassType.INT.instanceScope, 'this'), (visit, target, args) ->
+      JsBinary(visit(args[0]), JsBinaryOp.BITOR, JsText('0')))
 
-    register1(get(ClassType.BOOL.instanceScope, 'this'), (visit, target, arg0) ->
-      visit(arg0))
+    register(get(ClassType.BOOL.instanceScope, 'this'), (visit, target, args) ->
+      visit(args[0]))
 
-    register1(get(ClassType.FLOAT.instanceScope, 'this'), (visit, target, arg0) ->
-      visit(arg0))
+    register(get(ClassType.FLOAT.instanceScope, 'this'), (visit, target, args) ->
+      visit(args[0]))
 
-    register1(get(ClassType.STRING.instanceScope, 'this'), (visit, target, arg0) ->
-      visit(arg0))
+    register(get(ClassType.STRING.instanceScope, 'this'), (visit, target, args) ->
+      visit(args[0]))
 
-    register0(get(ClassType.INT.instanceScope, 'toHex'), (visit, target) ->
+    register(get(ClassType.INT.instanceScope, 'toHex'), (visit, target, args) ->
       JsCall(JsBinary(visit(target), JsBinaryOp.MEMBER, JsText('toString')), { JsText('16') }))
 
-    register1(get(ClassType.STRING.instanceScope, 'quote'), (visit, target, arg0) ->
+    register(get(ClassType.STRING.instanceScope, 'quote'), (visit, target, args) ->
       JsCall(JsBinary(JsText('JSON'), JsBinaryOp.MEMBER, JsText('stringify')), { visit(target) }))
 
-    register0(get(ClassType.STRING.instanceScope, 'toInt'), (visit, target) ->
+    register(get(ClassType.STRING.instanceScope, 'toInt'), (visit, target, args) ->
       JsBinary(visit(target), JsBinaryOp.BITOR, JsText('0')))
 
-    register0(get(ClassType.STRING.instanceScope, 'toFloat'), (visit, target) ->
+    register(get(ClassType.STRING.instanceScope, 'toFloat'), (visit, target, args) ->
       JsUnary(visit(target), JsUnaryOp.POS))
 
-    register2(get(ClassType.STRING.instanceScope, 'replace'), (visit, target, arg0, arg1) -> {
+    register(get(ClassType.STRING.instanceScope, 'replace'), (visit, target, args) -> {
       string ESCAPE_REGEX = '([\\.\\?\\*\\+\\^\\$\\[\\]\\/\\\\\\(\\)\\{\\}\\|\\-])'
-      if StringExpr arg0 = arg0 {
+      if StringExpr arg0 = args[0] {
         return JsCall(JsBinary(visit(target), JsBinaryOp.MEMBER, JsText('replace')), {
-          JsText('/' + escapeNonASCII(arg0.value.replacePattern(ESCAPE_REGEX, '\\$1')) + '/g'), visit(arg1) })
+          JsText('/' + escapeNonASCII(arg0.value.replacePattern(ESCAPE_REGEX, '\\$1')) + '/g'), visit(args[1]) })
       }
       return JsCall(JsBinary(visit(target), JsBinaryOp.MEMBER, JsText('replace')), {
-        JsCall(JsUnary(JsText('RegExp'), JsUnaryOp.NEW), { JsCall(JsBinary(visit(arg0), JsBinaryOp.MEMBER, JsText('replace')),
-          { JsText('/' + ESCAPE_REGEX + '/g'), JsText('"\\\\$1"') }), JsText('"g"') }), visit(arg1) })
+        JsCall(JsUnary(JsText('RegExp'), JsUnaryOp.NEW), { JsCall(JsBinary(visit(args[0]), JsBinaryOp.MEMBER, JsText('replace')),
+          { JsText('/' + ESCAPE_REGEX + '/g'), JsText('"\\\\$1"') }), JsText('"g"') }), visit(args[1]) })
     })
 
-    register2(get(ClassType.STRING.instanceScope, 'replacePattern'), (visit, target, arg0, arg1) -> {
-      if StringExpr arg0 = arg0 {
+    register(get(ClassType.STRING.instanceScope, 'replacePattern'), (visit, target, args) -> {
+      if StringExpr arg0 = args[0] {
         return JsCall(JsBinary(visit(target), JsBinaryOp.MEMBER, JsText('replace')), {
-          JsText('/' + escapeNonASCII(arg0.value.replace('/', '\\/')) + '/g'), visit(arg1) })
+          JsText('/' + escapeNonASCII(arg0.value.replace('/', '\\/')) + '/g'), visit(args[1]) })
       }
       return JsCall(JsBinary(visit(target), JsBinaryOp.MEMBER, JsText('replace')), {
-        JsCall(JsUnary(JsText('RegExp'), JsUnaryOp.NEW), { visit(arg0), JsText('"g"') }), visit(arg1) })
+        JsCall(JsUnary(JsText('RegExp'), JsUnaryOp.NEW), { visit(args[0]), JsText('"g"') }), visit(args[1]) })
     })
 
-    register1(get(ClassType.STRING.staticScope, 'fromCharCode'), (visit, target, arg0) ->
-      JsCall(JsBinary(JsText('String'), JsBinaryOp.MEMBER, JsText('fromCharCode')), { visit(arg0) }))
+    register(get(ClassType.STRING.staticScope, 'fromCharCode'), (visit, target, args) ->
+      JsCall(JsBinary(JsText('String'), JsBinaryOp.MEMBER, JsText('fromCharCode')), { visit(args[0]) }))
   }
 }
 
