@@ -49,7 +49,7 @@ Note:
     }
     else { files.push(arg) }
   }
-  if flagOutputFile {
+  if files.size == 0 or flagOutputFile {
     process.stdout.write(USAGE + '\n')
     process.exit(1)
   }
@@ -59,9 +59,6 @@ Note:
   Compiler compiler = {}
   for file in files {
     compiler.addFile(file, fs.readFileSync(file, 'utf8'))
-  }
-  if files.size == 0 {
-    compiler.addFile('<stdin>', fs.readFileSync('/dev/stdin', 'utf8'))
   }
   Module? node = compiler.compile()
   for message in compiler.log.messages {
@@ -87,6 +84,7 @@ Note:
 
 // Export the compiler so this module can be used with require()
 exports.Compiler = Compiler
+exports.JavaScript = JavaScript
 exports.main = main
 
 // Run main() if we weren't included via require()

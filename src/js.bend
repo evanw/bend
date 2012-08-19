@@ -179,7 +179,8 @@ class JsConverter {
       }
       else if i == funcType.splatIndex {
         int end = funcType.splatIndex - funcType.argTypes.size + 1
-        JsNode[] callArgs = { JsText('arguments'), JsText(i.toString()) }
+        JsNode[] callArgs = { JsText('arguments') }
+        if i > 0 or end < 0 { callArgs.push(JsText(i.toString())) }
         if end < 0 { callArgs.push(JsText(end.toString())) }
         argStmts.push(JsVars({ JsVar(
           argName,
@@ -597,14 +598,22 @@ class JsConverter {
         visit(node.type))
     }
     else if InitExpr node = node {
-      if ClassType classType = node.resolvedType {
-        JsNode[] values = {}
-        for value in node.values { values.push(visit(value)) }
-        return JsCall(JsUnary(constructPrefix(prefixFromScope(classType.staticScope)), JsUnaryOp.NEW), values)
+      if Symbol ctorSymbol = node.ctorSymbol {
+        if JsNode native = JsNative.handleCall(ctorSymbol, node, node.values, x -> visit(x)) {
+          return native
+        }
+        else if ClassType classType = node.resolvedType {
+          JsNode[] values = {}
+          for value in node.values { values.push(visit(value)) }
+          return JsCall(JsUnary(constructPrefix(prefixFromScope(classType.staticScope)), JsUnaryOp.NEW), values)
+        }
+        else { fail }
       }
-      JsNode[] nodes = {}
-      for value in node.values { nodes.push(visit(value)) }
-      return JsArray(nodes)
+      else {
+        JsNode[] nodes = {}
+        for value in node.values { nodes.push(visit(value)) }
+        return JsArray(nodes)
+      }
     }
     else if LambdaExpr node = node {
       thisAlias.nestedFuncCount++

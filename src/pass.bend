@@ -376,6 +376,9 @@ class CheckOverridePass is Pass {
     else if not overridesSymbol and shouldOverrideSymbol {
       log.error(node.location, 'function "' + node.id.name + '" is marked "over" but doesn\'t override anything')
     }
+    else if overridesSymbol and node.body == null {
+      log.error(node.location, 'function "' + node.id.name + '" cannot be an override without a function body')
+    }
   }
 }
 
@@ -560,8 +563,10 @@ class ResolveTypesPass is Pass {
   }
 
   over void visitIfStmt(IfStmt node) {
-    base.visitIfStmt(node)
+    visit(node.value)
     checkConversion(node.value.location, node.value.resolvedType, ClassType.BOOL)
+    visit(node.trueBody)
+    visit(node.falseBody)
   }
 
   over void visitWhileStmt(WhileStmt node) {
@@ -663,14 +668,18 @@ class ResolveTypesPass is Pass {
   }
 
   over void visitTertiaryExpr(TertiaryExpr node) {
+    visit(node.value)
+    checkConversion(node.value.location, node.value.resolvedType, ClassType.BOOL)
     if TypeContext context = context and context.node == node {
-      visit(node.value)
       visitWithContext(context.targetType, node.trueValue)
       visitWithContext(context.targetType, node.falseValue)
       checkConversion(node.trueValue.location, node.trueValue.resolvedType, context.targetType)
       checkConversion(node.falseValue.location, node.falseValue.resolvedType, context.targetType)
     }
-    else { base.visitTertiaryExpr(node) }
+    else {
+      visit(node.trueValue)
+      visit(node.falseValue)
+    }
   }
 
   over void visitCallExpr(CallExpr node) {
@@ -811,8 +820,12 @@ class ResolveTypesPass is Pass {
     base.visitMatchExpr(node)
     if Symbol symbol = node.id.symbol and symbol.type == SpecialType.ERROR {
       symbol.type = instanceType(node.type, false)
-      if node.value.resolvedType is not ClassType and node.value.resolvedType is not NullableType {
-        log.error(node.location, 'expected value of class or nullable type for match expression but got ' + node.value.resolvedType)
+      if symbol.type is NullableType {
+        log.error(node.location, 'cannot match on nullable type ' + symbol.type)
+      }
+      else if (Type.isPrimitive(symbol.type) or symbol.type is not ClassType) and
+          not Type.equals(node.value.resolvedType, NullableType(symbol.type)) {
+        log.error(node.location, 'type ' + symbol.type + ' cannot be matched with ' + node.value.resolvedType + ', only with ' + NullableType(symbol.type))
       }
       else { checkConversion(node.location, symbol.type, node.value.resolvedType) }
     }

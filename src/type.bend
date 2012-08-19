@@ -6,6 +6,15 @@ abstract class Type {
     return {}
   }
 
+  static bool isPrimitive(Type type) {
+    return type in {
+      ClassType.INT
+      ClassType.BOOL
+      ClassType.FLOAT
+      ClassType.STRING
+    }
+  }
+
   static Type removeParams(Type type, Type[] params) {
     if TypeParam type = type {
       if type.index >= params.size { fail }
@@ -67,7 +76,6 @@ abstract class Type {
 
   static bool canImplicitlyConvert(Type from, Type to) {
     if equals(from, to) { return true }
-    if from == ClassType.INT and to == ClassType.FLOAT { return true }
     if NullableType to = to {
       if from == SpecialType.NULL { return true }
       if NullableType from = from {
@@ -183,4 +191,10 @@ class ClassType is Type {
   BOOL = makeNative('bool')
   FLOAT = makeNative('float')
   STRING = makeNative('string')
+}
+
+ClassType.INT.baseType = ClassType.FLOAT
+if Symbol ctorSymbol = ClassType.INT.instanceScope.find('this') and
+    FuncType funcType = ctorSymbol.type {
+  funcType.argTypes[0] = ClassType.FLOAT
 }

@@ -39,3 +39,6 @@ node:
 replace: node
 	# Destructively update the current compiler
 	cp build/compiler.node.js lib/bend.js
+
+check:
+	node test/run.js
