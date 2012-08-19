@@ -19,7 +19,10 @@ class Scope {
   ERROR = { ScopeKind.ERROR, null, null }
 
   Symbol define(Log log, Location location, SymbolKind kind, string name, Type type, int modifiers) {
-    if find(name) != null {
+    // Classes actually have two scopes (static and instance) but we want unique identifiers between them
+    if find(name) != null or (Symbol symbol = this.symbol and MetaType metaType = symbol.type and ClassType type = metaType.instanceType and (
+        (this.kind == ScopeKind.INSTANCE and type.staticScope.find(name) != null) or
+        (this.kind == ScopeKind.STATIC and type.instanceScope.find(name) != null))) {
       log.error(location, '"' + name + '" is already defined in this scope')
     }
     Symbol symbol = { kind, name, type, this, modifiers }
