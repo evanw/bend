@@ -1,5 +1,5 @@
-var fs = require('fs')
-var bend = require('../lib/bend')
+var fs = require('fs');
+var bend = require('../lib/bend');
 
 var COLOR_ON = '\x1b[35m';
 var COLOR_OFF = '\x1b[0m';

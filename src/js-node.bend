@@ -202,7 +202,7 @@ class JsPrinter {
       if printed.indexOf('{') == 0 or ((printed.indexOf('function ') == 0 or printed.indexOf('function(') == 0) and not isNamedFunc) {
         printed = '(' + printed + ')'
       }
-      if (isComment and not wasComment and text.size > 0) or wasCommentStmt {
+      if (isComment and not wasComment and text.length > 0) or wasCommentStmt {
         text += '\n'
       }
       wasComment = isComment
@@ -230,8 +230,8 @@ class JsPrinter {
     else if JsComment node = node {
       // Remove any trailing newline
       string text = node.text
-      if text.size > 0 and text[text.size - 1] == '\n' {
-        text = text.slice(0, text.size - 1)
+      if text.length > 0 and text[text.length - 1] == '\n' {
+        text = text.slice(0, text.length - 1)
       }
       return text.split('\n').map(line -> '//' + line).join('\n' + spaces)
     }
@@ -246,7 +246,7 @@ class JsPrinter {
       string[] args = {}
       for arg in node.args { args.push(visit(arg)) }
       text += '(' + args.join(', ') + ') '
-      if JsBlock body = node.body and body.nodes.size == 0 { text += '{}' }
+      if JsBlock body = node.body and body.nodes.length == 0 { text += '{}' }
       else { text += visit(node.body) }
       return text
     }
@@ -314,8 +314,8 @@ class JsPrinter {
       else { fail }
     }
     else if JsArray node = node {
-      if node.nodes.size == 0 { return '[]' }
-      if node.nodes.size == 1 { return '[' + visit(node.nodes[0]) + ']' }
+      if node.nodes.length == 0 { return '[]' }
+      if node.nodes.length == 1 { return '[' + visit(node.nodes[0]) + ']' }
       spaces += '  '
       int totalSize = 0
       bool newlines = false
@@ -323,7 +323,7 @@ class JsPrinter {
       for node in node.nodes {
         string text = visit(node)
         if '\n' in text { newlines = true }
-        totalSize += text.size
+        totalSize += text.length
         texts.push(text)
       }
       if not newlines and totalSize < 32 {
@@ -336,8 +336,8 @@ class JsPrinter {
       return '[\n' + text + '\n' + spaces + ']'
     }
     else if JsObj node = node {
-      if node.nodes.size == 0 { return '{}' }
-      if node.nodes.size == 1 { return '{ ' + visit(node.nodes[0]) + ' }' }
+      if node.nodes.length == 0 { return '{}' }
+      if node.nodes.length == 1 { return '{ ' + visit(node.nodes[0]) + ' }' }
       spaces += '  '
       string[] texts = {}
       for node in node.nodes { texts.push(spaces + visit(node)) }

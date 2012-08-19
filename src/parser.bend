@@ -94,7 +94,7 @@ class Context {
   }
 
   void next() {
-    if index + 1 < tokens.size { index++ }
+    if index + 1 < tokens.length { index++ }
   }
 
   bool peek(TokenKind kind) {
@@ -102,7 +102,7 @@ class Context {
   }
 
   bool peekMore(TokenKind kind, int inc) {
-    if index + inc >= tokens.size { return tokens[tokens.size - 1].kind == kind }
+    if index + inc >= tokens.length { return tokens[tokens.length - 1].kind == kind }
     return tokens[index + inc].kind == kind
   }
 
@@ -312,7 +312,7 @@ class Parser {
       context.next()
       Expr[] args = {}
       while not context.eat(TokenKind.RPAREN) {
-        if args.size > 0 and not context.expect(TokenKind.COMMA) { return null }
+        if args.length > 0 and not context.expect(TokenKind.COMMA) { return null }
         if Expr arg = pratt.parse(context, 0) {
           args.push(arg)
         }
@@ -333,7 +333,7 @@ class Parser {
       if not context.expect(TokenKind.LPAREN) { return null }
       Expr[] args = {}
       while not context.eat(TokenKind.RPAREN) {
-        if args.size > 0 and not context.expect(TokenKind.COMMA) { return null }
+        if args.length > 0 and not context.expect(TokenKind.COMMA) { return null }
         if Expr arg = pratt.parse(context, 0) { args.push(arg) }
         else { return null }
       }
@@ -375,7 +375,7 @@ class Parser {
       IdentExpr[] args = {}
       context.next()
       while not context.eat(TokenKind.RARGS) {
-        if args.size > 0 and not context.expect(TokenKind.COMMA) { return null }
+        if args.length > 0 and not context.expect(TokenKind.COMMA) { return null }
         Token token = context.current()
         args.push(IdentExpr(token.location, context.current().text))
         if not context.expect(TokenKind.IDENT) { return null }
@@ -398,7 +398,7 @@ class Parser {
     // Create another pratt parser that doesn't parse top-level match expressions
     prattWithoutMatch.table = pratt.table.slice()
     int i = 0
-    while i < prattWithoutMatch.table.size {
+    while i < prattWithoutMatch.table.length {
       Parselet oldParselet = prattWithoutMatch.table[i]
       if oldParselet.kind == TokenKind.IDENT {
         Parselet newParselet = { oldParselet.kind, oldParselet.leftBindingPower }
@@ -473,7 +473,7 @@ class Parser {
   }
 
   void insertCommentInBlock(string? comment, Block block) {
-    if block.stmts.size > 0 and block.stmts[0].comment == null {
+    if block.stmts.length > 0 and block.stmts[0].comment == null {
       block.stmts[0].comment = comment
     }
     else { block.stmts.unshift(CommentStmt(block.location, comment)) }
@@ -483,7 +483,7 @@ class Parser {
     VarDef[] args = {}
     int splats = 0
     while not context.eat(TokenKind.RPAREN) {
-      if args.size > 0 and not context.expect(TokenKind.COMMA) { return null }
+      if args.length > 0 and not context.expect(TokenKind.COMMA) { return null }
       if Expr type = prattWithoutMatch.parse(context, 0) {
         VarDef arg = { type.location, null, IdentExpr(context.current().location, context.current().text), 0, type, null }
         if not context.expect(TokenKind.IDENT) { return null }

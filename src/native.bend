@@ -33,7 +33,7 @@ abstract class SpecialScope {
 
     func(INT.instanceScope, 'toHex', { STRING, {}, 0 })
 
-    field(STRING.instanceScope, 'size', INT)
+    field(STRING.instanceScope, 'length', INT)
     func(STRING.staticScope, 'fromCharCode', { STRING, { INT }, 1 })
     func(STRING.instanceScope, 'quote', { STRING, { STRING }, 1 })
     func(STRING.instanceScope, 'slice', { STRING, { INT, INT }, 1 })
@@ -48,7 +48,7 @@ abstract class SpecialScope {
     func(STRING.instanceScope, 'indexOf', { INT, { STRING }, 1 })
     func(STRING.instanceScope, 'charCodeAt', { INT, { INT }, 1 })
 
-    field(ARRAY_INSTANCE, 'size', INT)
+    field(ARRAY_INSTANCE, 'length', INT)
     func(ARRAY_INSTANCE, 'push', { VOID, { T0 }, 1 })
     func(ARRAY_INSTANCE, 'pop', { T0, {}, 0 })
     func(ARRAY_INSTANCE, 'unshift', { VOID, { T0 }, 1 })
@@ -89,17 +89,17 @@ class JsNative {
   static void register2(Symbol symbol, JsNode fn(JsNode fn(Expr), Expr, Expr, Expr) callback) { handlers2.push({ symbol, callback }) }
 
   static JsNode? handleCall(Symbol symbol, Expr target, Expr[] args, JsNode fn(Expr) visit) {
-    if args.size == 0 {
+    if args.length == 0 {
       for handler in handlers0 {
         if handler.symbol == symbol { return handler.callback(visit, target) }
       }
     }
-    else if args.size == 1 {
+    else if args.length == 1 {
       for handler in handlers1 {
         if handler.symbol == symbol { return handler.callback(visit, target, args[0]) }
       }
     }
-    else if args.size == 2 {
+    else if args.length == 2 {
       for handler in handlers2 {
         if handler.symbol == symbol { return handler.callback(visit, target, args[0], args[1]) }
       }
@@ -114,7 +114,7 @@ class JsNative {
 
   static string escapeNonASCII(string text) {
     int i = 0
-    while i < text.size {
+    while i < text.length {
       int code = text.charCodeAt(i++)
       if code == 9 {
         text = text.slice(0, i - 1) + '\\t' + text.slice(i)
@@ -130,13 +130,13 @@ class JsNative {
       }
       else if code < 32 or code > 126 {
         string word = code.toHex()
-        if word.size == 1 { word = '\\x0' + word }
-        else if word.size == 2 { word = '\\x' + word }
-        else if word.size == 3 { word = '\\u0' + word }
-        else if word.size == 4 { word = '\\u' + word }
+        if word.length == 1 { word = '\\x0' + word }
+        else if word.length == 2 { word = '\\x' + word }
+        else if word.length == 3 { word = '\\u0' + word }
+        else if word.length == 4 { word = '\\u' + word }
         else { fail }
         text = text.slice(0, i - 1) + word + text.slice(i)
-        i += word.size - 1
+        i += word.length - 1
       }
     }
     return text

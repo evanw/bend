@@ -105,7 +105,7 @@ class JsConverter {
     JsNode[] nodes = {}
     for stmt in stmts {
       JsNode[] visited = visitStmt(stmt)
-      if visited.size == 0 and stmt is not CommentStmt { continue }
+      if visited.length == 0 and stmt is not CommentStmt { continue }
       if string comment = stmt.comment { nodes.push(JsComment(comment, stmt is CommentStmt)) }
       nodes = nodes.concat(visited)
     }
@@ -113,10 +113,10 @@ class JsConverter {
   }
 
   JsNode constructPrefix(string[] list) {
-    if list.size == 0 { fail }
-    if list.size == 1 { return JsText(list[0]) }
-    return JsBinary(constructPrefix(list.slice(0, list.size - 1)),
-      JsBinaryOp.MEMBER, JsText(list[list.size - 1]))
+    if list.length == 0 { fail }
+    if list.length == 1 { return JsText(list[0]) }
+    return JsBinary(constructPrefix(list.slice(0, list.length - 1)),
+      JsBinaryOp.MEMBER, JsText(list[list.length - 1]))
   }
 
   string[] prefixFromScope(Scope? nextScope) {
@@ -143,7 +143,7 @@ class JsConverter {
       return { node }
     }
     string[] prefix = prefixFromScope(scope)
-    if prefix.size == 0 {
+    if prefix.length == 0 {
       return { JsVars({ JsVar(symbol.name, value) }) }
     }
     JsNode prefixChain = constructPrefix(prefix.concat({ symbol.name }))
@@ -178,7 +178,7 @@ class JsConverter {
         jsArgs.push(JsText(argName))
       }
       else if i == funcType.splatIndex {
-        int end = funcType.splatIndex - funcType.argTypes.size + 1
+        int end = funcType.splatIndex - funcType.argTypes.length + 1
         JsNode[] callArgs = { JsText('arguments') }
         if i > 0 or end < 0 { callArgs.push(JsText(i.toString())) }
         if end < 0 { callArgs.push(JsText(end.toString())) }
@@ -198,7 +198,7 @@ class JsConverter {
             callArgs)) }))
       }
       else {
-        int index = args.size - i
+        int index = args.length - i
         argStmts.push(JsVars({ JsVar(
           argName,
           JsBinary(
@@ -226,7 +226,7 @@ class JsConverter {
       JsNode? no = null
       if Block falseBody = node.falseBody {
         JsNode elseBlock = visit(falseBody)
-        if JsBlock block = elseBlock and block.nodes.size == 1 and JsIf elseIf = block.nodes[0] {
+        if JsBlock block = elseBlock and block.nodes.length == 1 and JsIf elseIf = block.nodes[0] {
           no = elseIf
         }
         else { no = elseBlock }
@@ -311,8 +311,8 @@ class JsConverter {
       }
 
       // If the loop count isn't 1, generate a label for the target loop
-      if value > 1 and value <= loops.size {
-        int i = loops.size - value
+      if value > 1 and value <= loops.length {
+        int i = loops.length - value
         string text
         if string label = loops[i] { text = label }
         else {
@@ -471,7 +471,7 @@ class JsConverter {
     }
     else { nodes = visitStmts(stmts) }
 
-    if vars.size > 0 { nodes.unshift(JsVars(vars)) }
+    if vars.length > 0 { nodes.unshift(JsVars(vars)) }
     return nodes
   }
 
@@ -560,7 +560,7 @@ class JsConverter {
             // TODO: Replace this special case with a splat constructor in native.bend
             return JsArray(args)
           }
-          else if (metaType.instanceType is FuncType or metaType.instanceType == SpecialType.VAR) and args.size == 1 {
+          else if (metaType.instanceType is FuncType or metaType.instanceType == SpecialType.VAR) and args.length == 1 {
             return args[0]
           }
           else { fail }
@@ -572,10 +572,7 @@ class JsConverter {
       return JsBinary(visit(node.value), JsBinaryOp.INDEX, visit(node.index))
     }
     else if MemberExpr node = node {
-      if (node.value.resolvedType == ClassType.STRING or node.value.resolvedType is ArrayType) and Symbol symbol = node.id.symbol and symbol.name == 'size' {
-        return JsBinary(visit(node.value), JsBinaryOp.MEMBER, JsText('length'))
-      }
-      else if node.value.resolvedType == SpecialType.VAR {
+      if node.value.resolvedType == SpecialType.VAR {
         return JsBinary(visit(node.value), JsBinaryOp.MEMBER, JsText(node.id.name))
       }
       else if Symbol symbol = node.id.symbol {

@@ -328,7 +328,7 @@ class ResolveSymbolTypesPass is Pass {
       }
       i++
     }
-    FuncType funcType = { instanceType(node.returnType, true), argTypes, argTypes.size }
+    FuncType funcType = { instanceType(node.returnType, true), argTypes, argTypes.length }
     if splatIndex != -1 { funcType.minArgCount-- }
     funcType.splatIndex = splatIndex
     funcType.argNames = argNames
@@ -343,7 +343,7 @@ class ResolveSymbolTypesPass is Pass {
       argTypes.push(instanceType(arg.type, false))
       argNames.push(arg.id.name)
     }
-    FuncType funcType = { SpecialType.VOID, argTypes, argTypes.size }
+    FuncType funcType = { SpecialType.VOID, argTypes, argTypes.length }
     funcType.argNames = argNames
     if Symbol symbol = node.id.symbol { symbol.type = funcType }
   }
@@ -435,7 +435,7 @@ class GenerateCtorsPass is Pass {
           string[] argNames = funcType.argNames {
         Expr[] baseArgs = {}
         int i = 0
-        while i < argNames.size {
+        while i < argNames.length {
           string name = argNames[i]
           args.push({ location, null, IdentExpr(location, name), 0, TypeExpr(location, MetaType(funcType.argTypes[i])), null })
           baseArgs.push(IdentExpr(location, name))
@@ -515,19 +515,19 @@ class ResolveTypesPass is Pass {
   }
 
   void visitCallArgs(Location location, FuncType funcType, Expr[] args) {
-    if args.size < funcType.minArgCount {
-      log.error(location, 'expected at least ' + funcType.minArgCount + ' arguments but got ' + args.size)
+    if args.length < funcType.minArgCount {
+      log.error(location, 'expected at least ' + funcType.minArgCount + ' arguments but got ' + args.length)
     }
-    else if args.size > funcType.argTypes.size and funcType.splatIndex == -1 {
-      log.error(location, 'expected at most ' + funcType.argTypes.size + ' arguments but got ' + args.size)
+    else if args.length > funcType.argTypes.length and funcType.splatIndex == -1 {
+      log.error(location, 'expected at most ' + funcType.argTypes.length + ' arguments but got ' + args.length)
     }
     else {
       int i = 0
-      while i < args.size {
+      while i < args.length {
         Type argType = SpecialType.ERROR
         if funcType.splatIndex != -1 and i >= funcType.splatIndex {
-          if i + funcType.argTypes.size - args.size > funcType.splatIndex {
-            argType = funcType.argTypes[i + funcType.argTypes.size - args.size]
+          if i + funcType.argTypes.length - args.length > funcType.splatIndex {
+            argType = funcType.argTypes[i + funcType.argTypes.length - args.length]
           }
           else if ArrayType arrayType = funcType.argTypes[funcType.splatIndex] {
             argType = arrayType.elementType
@@ -837,16 +837,16 @@ class ResolveTypesPass is Pass {
       if context.targetType == SpecialType.VAR {
         Type[] argTypes = {}
         for arg in node.args { argTypes.push(SpecialType.VAR) }
-        targetType = { SpecialType.VAR, argTypes, argTypes.size }
+        targetType = { SpecialType.VAR, argTypes, argTypes.length }
       }
       else if FuncType funcType = context.targetType {
         targetType = funcType
       }
     }
     if FuncType targetType = targetType {
-      if targetType.argTypes.size == node.args.size {
+      if targetType.argTypes.length == node.args.length {
         int i = 0
-        while i < node.args.size {
+        while i < node.args.length {
           IdentExpr arg = node.args[i]
           visit(arg)
           if Symbol symbol = arg.symbol and symbol.type == SpecialType.ERROR {
@@ -862,7 +862,7 @@ class ResolveTypesPass is Pass {
         visit(node.body)
         funcType = old
       }
-      else { log.error(node.location, 'lambda expected ' + node.args.size + ' arguments but context gave ' + targetType.argTypes.size) }
+      else { log.error(node.location, 'lambda expected ' + node.args.length + ' arguments but context gave ' + targetType.argTypes.length) }
     }
     else { log.error(node.location, 'need context to resolve lambda type') }
   }
@@ -885,7 +885,7 @@ class ResolveTypesPass is Pass {
       if argType == SpecialType.ERROR { return }
       argTypes.push(argType)
     }
-    node.resolvedType = MetaType(FuncType(returnType, argTypes, argTypes.size))
+    node.resolvedType = MetaType(FuncType(returnType, argTypes, argTypes.length))
   }
 
   over void visitNullableTypeExpr(NullableTypeExpr node) {

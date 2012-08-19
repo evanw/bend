@@ -17,7 +17,7 @@ abstract class Type {
 
   static Type removeParams(Type type, Type[] params) {
     if TypeParam type = type {
-      if type.index >= params.size { fail }
+      if type.index >= params.length { fail }
       return params[type.index]
     }
     if MetaType type = type {
@@ -60,12 +60,12 @@ abstract class Type {
     }
     if FuncType a = a and FuncType b = b {
       if not equals(a.returnType, b.returnType) or
-          a.argTypes.size != b.argTypes.size or
+          a.argTypes.length != b.argTypes.length or
           a.minArgCount != b.minArgCount {
         return false
       }
       int i = 0
-      while i < a.argTypes.size {
+      while i < a.argTypes.length {
         if not equals(a.argTypes[i], b.argTypes[i]) { return false }
         i++
       }
@@ -140,7 +140,7 @@ class FuncType is Type {
   Type returnType
   Type[] argTypes
 
-  // If all arguments are required, minArgCount == argTypes.size
+  // If all arguments are required, minArgCount == argTypes.length
   int minArgCount
 
   // A splat can take zero or more arguments, -1 means no splat
@@ -154,7 +154,7 @@ class FuncType is Type {
   over string toString() {
     string[] args = {}
     int i = 0
-    while i < argTypes.size {
+    while i < argTypes.length {
       string arg = argTypes[i].toString()
       if i > minArgCount { arg = '?' + arg }
       if i == splatIndex { arg += '...' }

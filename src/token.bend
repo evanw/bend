@@ -286,7 +286,7 @@ class Tokenizer {
     int line = 1
     int i = 0
 
-    while i < text.size {
+    while i < text.length {
       // Create an error token by default
       Token token = { { file, line }, TokenKind.ERROR, '' }
       int start = i
@@ -295,13 +295,13 @@ class Tokenizer {
       if isNumber(text[i]) {
         token.kind = TokenKind.INT_LIT
         i++
-        while i < text.size and isNumber(text[i]) { i++ }
+        while i < text.length and isNumber(text[i]) { i++ }
 
         // Parse float literal
-        if i + 1 < text.size and text[i] == '.' and isNumber(text[i + 1]) {
+        if i + 1 < text.length and text[i] == '.' and isNumber(text[i + 1]) {
           token.kind = TokenKind.FLOAT_LIT
           i += 2
-          while i < text.size and isNumber(text[i]) { i++ }
+          while i < text.length and isNumber(text[i]) { i++ }
         }
       }
 
@@ -309,7 +309,7 @@ class Tokenizer {
       else if isLetter(text[i]) {
         token.kind = TokenKind.IDENT
         i++
-        while i < text.size and (isLetter(text[i]) or isNumber(text[i])) { i++ }
+        while i < text.length and (isLetter(text[i]) or isNumber(text[i])) { i++ }
         token.text = text.slice(start, i)
         for kind in TokenKind.IDENTIFIERS {
           if kind.text == token.text {
@@ -321,7 +321,7 @@ class Tokenizer {
 
       // Parse whitespace
       else if isSpace(text[i]) {
-        while i < text.size and isSpace(text[i]) {
+        while i < text.length and isSpace(text[i]) {
           if text[i] == '\n' {
             token.kind = TokenKind.NEWLINE
             line++
@@ -329,8 +329,8 @@ class Tokenizer {
           i++
         }
         if token.kind == TokenKind.ERROR { continue }
-        if tokens.size > 0 and tokens[tokens.size - 1].kind == TokenKind.NEWLINE {
-          tokens[tokens.size - 1].text += text.slice(start, i)
+        if tokens.length > 0 and tokens[tokens.length - 1].kind == TokenKind.NEWLINE {
+          tokens[tokens.length - 1].text += text.slice(start, i)
           continue
         }
       }
@@ -338,13 +338,13 @@ class Tokenizer {
       // Parse string literal
       else if text[i] == '"' or text[i] == '\'' {
         i++
-        while i < text.size {
+        while i < text.length {
           if text[i] == text[start] {
             token.kind = TokenKind.STRING_LIT
             i++
             break
           }
-          else if text[i] == '\\' and i + 1 < text.size {
+          else if text[i] == '\\' and i + 1 < text.length {
             string c = text[++i]
             if c == '"' or c == '\'' or c == '\\' { token.text += c }
             else if c == 't' { token.text += '\t' }
@@ -352,7 +352,7 @@ class Tokenizer {
             else if c == 'n' { token.text += '\n' }
             else if c == 'x' {
               int hi = -1, lo = -1
-              if i + 2 < text.size {
+              if i + 2 < text.length {
                 hi = '0123456789abcdef'.indexOf(text[++i].toLowerCase())
                 lo = '0123456789abcdef'.indexOf(text[++i].toLowerCase())
               }
@@ -382,11 +382,11 @@ class Tokenizer {
       }
 
       // Check for single line comments
-      else if text[i] == '/' and i + 1 < text.size and text[i + 1] == '/' {
+      else if text[i] == '/' and i + 1 < text.length and text[i + 1] == '/' {
         token.kind = TokenKind.COMMENT
         i += 2
         start = i
-        while i < text.size {
+        while i < text.length {
           if text[i++] == '\n' {
             line++
             break
@@ -395,10 +395,10 @@ class Tokenizer {
       }
 
       // Check for multi-line comments (they nest, unlike C-style comments)
-      else if text[i] == '/' and i + 1 < text.size and text[i + 1] == '+' {
+      else if text[i] == '/' and i + 1 < text.length and text[i + 1] == '+' {
         i += 2
         int depth = 1
-        while i + 1 < text.size {
+        while i + 1 < text.length {
           if text[i] == '/' and text[i + 1] == '+' {
             i += 2
             depth++
@@ -434,9 +434,9 @@ class Tokenizer {
       // Check for symbols
       else {
         for kind in TokenKind.SYMBOLS {
-          if string t = kind.text and text.slice(i, i + t.size) == t {
+          if string t = kind.text and text.slice(i, i + t.length) == t {
             token.kind = kind
-            i += t.size
+            i += t.length
             break
           }
         }
@@ -459,7 +459,7 @@ class Tokenizer {
     // Post-process the parsed tokens
     Token[] stack = {}
     i = 0
-    while i < tokens.size {
+    while i < tokens.length {
       Token token = tokens[i++]
 
       // Try to merge this token with the previous token
@@ -492,12 +492,12 @@ class Tokenizer {
 
       // Keep track of the current bracket nesting using a stack
       if token.kind in TokenKind.LEFT_BRACKETS { stack.push(token) }
-      else if stack.size > 0 and token.kind in TokenKind.RIGHT_BRACKETS {
+      else if stack.length > 0 and token.kind in TokenKind.RIGHT_BRACKETS {
         Token top = stack.pop()
 
         // Convert parentheses to lambda argument tokens
         if top.kind == TokenKind.LPAREN and token.kind == TokenKind.RPAREN and
-            i < tokens.size and tokens[i].kind == TokenKind.ARROW {
+            i < tokens.length and tokens[i].kind == TokenKind.ARROW {
           top.kind = TokenKind.LARGS
           token.kind = TokenKind.RARGS
         }

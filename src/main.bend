@@ -23,7 +23,7 @@ Note:
 
   // Parse command-line arguments
   for arg in process.argv.slice(2) {
-    if arg.size == 0 { continue }
+    if arg.length == 0 { continue }
     else if flagOutputFile {
       outputPath = arg
       flagOutputFile = false
@@ -49,7 +49,7 @@ Note:
     }
     else { files.push(arg) }
   }
-  if files.size == 0 or flagOutputFile {
+  if files.length == 0 or flagOutputFile {
     process.stdout.write(USAGE + '\n')
     process.exit(1)
   }
