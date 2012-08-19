@@ -14,7 +14,7 @@ An example Bend program:
 
 # Live Demo
 
-The live demo is available at [https://evanw.github.com/bend/](https://evanw.github.com/bend/) and includes many more examples.
+The live demo is available at [http://evanw.github.com/bend/](http://evanw.github.com/bend/) and includes many more examples.
 
 # Installation
 
