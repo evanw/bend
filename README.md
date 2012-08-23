@@ -1,3 +1,4 @@
+[![build status](https://secure.travis-ci.org/evanw/bend.png)](http://travis-ci.org/evanw/bend)
 # The Bend Programming Language
 
 Bend is a statically-typed programming language for the web. It compiles down to readable JavaScript with no runtime library and easily integrates with other JavaScript code.
